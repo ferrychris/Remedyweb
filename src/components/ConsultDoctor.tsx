@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+// import React, { useState } from 'react';
 import { User2, Mail, MessageSquare } from 'lucide-react';
+import { useState } from 'react';
 
 function ConsultDoctor() {
-  const [selectedSpecialist, setSelectedSpecialist] = useState('');
+  const [selectedSpecialist, setSelectedSpecialist] = useState<number | null>(null);
 
   const specialists = [
     { id: 1, type: 'Herbalist', name: 'Dr. Sarah Green', availability: 'Mon-Fri' },

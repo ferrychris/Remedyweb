@@ -1,21 +1,30 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
+
+// Public Components
 import Navbar from './components/Navbar';
 import Home from './components/Home';
-import Remedies from './components/Remedies';
-import RemedyDetail from './components/RemedyDetail';
-import Ailments from './components/Ailments';
-import AilmentDetail from './components/AilmentDetail';
-import ConsultDoctor from './components/ConsultDoctor';
-import Store from './components/Store';
-import ProductDetail from './components/ProductDetail';
-import Admin from './components/Admin';
-import { AdminDashboard } from './components/AdminDashboard';
 import Footer from './components/Footer';
 import { SearchResults } from './components/SearchResults';
-import { Dashboard } from './components/Dashboard';
-import { AdminLogin } from './components/AdminLogin';
-import AdminPanel from './components/AdminPanel';
+
+// Remedy Components
+import Remedies from './components/remedycomponents/Remedies';
+import RemedyDetail from './components/remedycomponents/RemedyDetail';
+import Ailments from './components/Ailments';
+import AilmentDetail from './components/AilmentDetail';
+
+// User Components
+import ConsultDoctor from './components/ConsultDoctor';
+import { Dashboard } from './components/userdashboard/Dashboard';
+
+// Store Components
+import Store from './components/storecomponents/Store';
+import ProductDetail from './components/storecomponents/ProductDetail';
+
+// Admin Components
+import { AdminDashboard } from './components/admincomponents/AdminDashboard';
+import AdminPanel from './components/admincomponents/AdminPanel';
+import { AdminLogin } from './components/admincomponents/AdminLogin';
 
 function App() {
   return (
@@ -23,21 +32,38 @@ function App() {
       <Navbar />
       <main className="container mx-auto px-4 py-8">
         <Routes>
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/admin/login" element={<AdminLogin />} />
-          <Route path="/admin/*" element={<AdminPanel />} />
           <Route path="/" element={<Home />} />
+          
+          {/* Remedy Routes */}
           <Route path="/remedies" element={<Remedies />} />
           <Route path="/remedies/:slug" element={<RemedyDetail />} />
           <Route path="/ailments" element={<Ailments />} />
           <Route path="/ailments/:slug" element={<AilmentDetail />} />
+          
+          {/* User Routes */}
+          <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/consult" element={<ConsultDoctor />} />
+          
+          {/* Store Routes */}
           <Route path="/store" element={<Store />} />
           <Route path="/store/:slug" element={<ProductDetail />} />
-          <Route path='/test' element={<AdminDashboard/>}/>          <Route path="/search" element={<SearchResults />} />
+          
+          {/* Admin Routes */}
+          <Route path="/adminlogin" element={<AdminLogin />} />
+          <Route path="/admin/*" element={<AdminPanel />}>
+            <Route index element={<AdminDashboard />} />
+            <Route path="users" element={<div>Users Management (Coming Soon)</div>} />
+            <Route path="remedies" element={<div>Remedies Management (Coming Soon)</div>} />
+            <Route path="comments" element={<div>Comments Management (Coming Soon)</div>} />
+            <Route path="settings" element={<div>Admin Settings (Coming Soon)</div>} />
+          </Route>
+          
+          {/* Search Route */}
+          <Route path="/search" element={<SearchResults />} />
         </Routes>
       </main>
       <Footer />
+      <Toaster position="bottom-right" />
     </div>
   );
 }

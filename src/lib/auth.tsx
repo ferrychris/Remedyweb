@@ -7,6 +7,7 @@ type UserProfile = {
   id: string;
   display_name: string | null;
   bio: string | null;
+  avatar_url: string | null;
   is_admin: boolean;
   created_at: string;
   updated_at: string;
@@ -83,6 +84,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             {
               id: user.id,
               display_name: user.email?.split('@')[0] || 'User',
+              bio: null,
+              avatar_url: null,
               is_admin: false,
               created_at: new Date().toISOString(),
               updated_at: new Date().toISOString()
@@ -173,28 +176,58 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (error) throw error;
       if (!data.user) throw new Error('No user returned from sign up');
 
-      // Create user profile using the service role client to bypass RLS
+      // Create user profile with all required fields
       const { error: profileError } = await supabase
         .from('user_profiles')
         .insert([
           {
             id: data.user.id,
-            display_name: email.split('@')[0], // Match the metadata
+            display_name: email.split('@')[0],
             bio: null,
-            is_admin: false,
+            avatar_url: null,
+            is_admin: false, // Explicitly set to false for security
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           },
         ])
-        .select('*')
-        .maybeSingle(); // Use maybeSingle instead of single to handle no results case
+        .select()
+        .single();
 
       if (profileError) {
-        console.error('Failed to create user profile:', profileError);
-        // Don't throw here - the user is still created, they just might need to create their profile later
+        console.error('Failed to create profile:', profileError);
+        // Log the attempt for debugging
+        console.log('Profile creation attempt:', {
+          userId: data.user.id,
+          email: data.user.email,
+          error: profileError.message
+        });
+
+        // Verify if profile exists despite error
+        const { data: existingProfile, error: checkError } = await supabase
+          .from('user_profiles')
+          .select('id, is_admin')
+          .eq('id', data.user.id)
+          .single();
+
+        if (checkError || !existingProfile) {
+          throw new Error('Failed to create user profile');
+        }
+
+        // Profile exists, log this case
+        console.log('Profile already exists:', {
+          userId: data.user.id,
+          email: data.user.email,
+          isAdmin: existingProfile.is_admin
+        });
+      } else {
+        // Log successful profile creation
+        console.log('Profile created successfully:', {
+          userId: data.user.id,
+          email: data.user.email,
+          isAdmin: false
+        });
       }
 
-      // Don't set the state here since the user needs to verify their email first
       toast.success('Please check your email to verify your account');
     } catch (error: any) {
       console.error('Sign up error:', error);

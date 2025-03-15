@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { useAuth } from '../lib/auth';
+import { useState, useEffect } from 'react';
+import { useAuth } from '../../lib/auth';
 import toast from 'react-hot-toast';
-import { AuthModal } from './AuthModal';
-import { supabase } from '../lib/supabase';
+import { AuthModal } from '../AuthModal';
+import { supabase } from '../../lib/supabase';
 import { Link } from 'react-router-dom';
 
 interface UserActivity {

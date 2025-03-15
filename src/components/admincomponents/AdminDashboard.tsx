@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { useAuth } from '../lib/auth';
-import { supabase } from '../lib/supabase';
+// import React, { useState, useEffect } from 'react';
+import { useAuth } from '../../lib/auth'; 
+import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 import { Navigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
 
 interface AdminStats {
   totalOrders: number;
