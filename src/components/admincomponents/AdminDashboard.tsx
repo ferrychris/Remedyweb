@@ -52,8 +52,8 @@ export function AdminDashboard() {
   const [pendingAilments, setPendingAilments] = useState<any[]>([]);
 
   // Redirect if not admin
-  if (!profile?.is_admin) {
-    return <Navigate to="/dashboard" replace />;
+  if (profile?.is_admin) {
+    return <Navigate to="/admin/admindashboard" replace />;
   }
 
   useEffect(() => {

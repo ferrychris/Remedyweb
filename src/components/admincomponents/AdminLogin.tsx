@@ -31,10 +31,10 @@ export function AdminLogin() {
 
       console.log('Authenticated User:', user);
 
-      // Fetch user profile
+      // Fetch user profile from user_profiles table
       const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
+        .from('user_profiles')
+        .select('is_admin')
         .eq('id', user.id)
         .single();
 
@@ -71,17 +71,17 @@ export function AdminLogin() {
         throw new Error('No user data received');
       }
 
-      // Query using both email and ID for maximum compatibility
+      // Query user_profiles table with proper filter syntax
       const { data: profile, error: profileError } = await supabase
         .from('user_profiles')
         .select('is_admin')
-        .or(`email.eq.${data.user.email},id.eq.${data.user.id}`)
+        .eq('id', data.user.id)
         .single();
 
       // Log verification details
       console.log('Admin verification attempt:', {
+        userId: data.user.id,
         email: data.user.email,
-        id: data.user.id,
         success: !!profile && profile.is_admin,
         error: profileError?.message || null
       });

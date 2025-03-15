@@ -52,6 +52,7 @@ function App() {
           <Route path="/adminlogin" element={<AdminLogin />} />
           <Route path="/admin/*" element={<AdminPanel />}>
             <Route index element={<AdminDashboard />} />
+            <Route path="admindashboard" element={<AdminDashboard/>} />
             <Route path="users" element={<div>Users Management (Coming Soon)</div>} />
             <Route path="remedies" element={<div>Remedies Management (Coming Soon)</div>} />
             <Route path="comments" element={<div>Comments Management (Coming Soon)</div>} />
