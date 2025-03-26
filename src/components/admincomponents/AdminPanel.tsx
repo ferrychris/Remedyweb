@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Routes, Route, Link, useNavigate, useLocation, Outlet } from 'react-router-dom';
+import { Link, useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
-import { AdminDashboard } from './AdminDashboard';
 import toast from 'react-hot-toast';
 import { 
   LayoutDashboard, 
@@ -10,8 +9,16 @@ import {
   MessageSquare, 
   Settings,
   ChevronRight,
-  Menu
+  Menu,
+  Stethoscope, // Added for Consultants icon
 } from 'lucide-react';
+
+// Import the management components
+import { AilmentsManagement } from './AilmentsManagement';
+import { RemediesManagement } from './RemediesManagement';
+import { StoreManagement } from './StoreManagement';
+import { AdminDashboard } from './AdminDashboard';
+import { ConsultantsManagement } from './ConsultantsManagement'; // Added ConsultantsManagement
 
 interface AdminPanelProps {}
 
@@ -23,23 +30,39 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
   const location = useLocation();
 
   useEffect(() => {
+    console.log('AdminPanel useEffect triggered');
     checkAdminStatus();
   }, []);
 
   const checkAdminStatus = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError) {
+        console.error('User fetch error:', userError);
+        throw new Error('Failed to get user: ' + userError.message);
+      }
       if (!user) {
         toast.error('Please log in to access admin panel');
         navigate('/adminlogin');
         return;
       }
 
-      const { data: profile } = await supabase
-        .from('profiles')
+      const { data: profile, error: profileError } = await supabase
+        .from('user_profiles') // Ensure this matches your table
         .select('is_admin')
         .eq('id', user.id)
         .single();
+
+      if (profileError) {
+        console.error('Profile fetch error:', profileError);
+        if (profileError.code === 'PGRST116') {
+          toast.error('User profile not found. Please complete your profile setup.');
+        } else {
+          toast.error('Failed to verify admin status: ' + profileError.message);
+        }
+        navigate('/adminlogin');
+        return;
+      }
 
       if (!profile?.is_admin) {
         toast.error('Unauthorized access');
@@ -50,7 +73,7 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
       setIsAdmin(true);
     } catch (error) {
       console.error('Admin check error:', error);
-      toast.error('Error checking admin status');
+      toast.error('Error checking admin status: ' + (error.message || 'Unknown error'));
       navigate('/adminlogin');
     } finally {
       setIsLoading(false);
@@ -64,7 +87,7 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
       navigate('/adminlogin');
     } catch (error) {
       console.error('Sign out error:', error);
-      toast.error('Error signing out');
+      toast.error('Error signing out: ' + (error.message || 'Unknown error'));
     }
   };
 
@@ -72,8 +95,11 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
     { path: '/admin', icon: <LayoutDashboard size={20} />, label: 'Dashboard' },
     { path: '/admin/users', icon: <Users size={20} />, label: 'Users' },
     { path: '/admin/remedies', icon: <Leaf size={20} />, label: 'Remedies' },
+    { path: '/admin/ailments', icon: <Leaf size={20} />, label: 'Ailments' },
+    { path: '/admin/consultants', icon: <Stethoscope size={20} />, label: 'Consultants' }, // Added Consultants
+    { path: '/admin/store', icon: <MessageSquare size={20} />, label: 'Store' },
     { path: '/admin/comments', icon: <MessageSquare size={20} />, label: 'Comments' },
-    { path: '/admin/settings', icon: <Settings size={20} />, label: 'Settings' }
+    { path: '/admin/settings', icon: <Settings size={20} />, label: 'Settings' },
   ];
 
   if (isLoading) {
@@ -99,15 +125,17 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
       </button>
 
       {/* Sidebar */}
-      <div className={`
-        fixed md:static
-        inset-y-0 left-0
-        w-64 bg-white shadow-lg
-        transform transition-transform duration-300 ease-in-out
-        ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-        md:translate-x-0
-        z-40
-      `}>
+      <div
+        className={`
+          fixed md:static
+          inset-y-0 left-0
+          w-64 bg-white shadow-lg
+          transform transition-transform duration-300 ease-in-out
+          ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+          md:translate-x-0
+          z-40
+        `}
+      >
         <div className="p-4">
           <h2 className="text-2xl font-bold text-gray-800 mb-8">Admin Panel</h2>
           <nav className="space-y-1">

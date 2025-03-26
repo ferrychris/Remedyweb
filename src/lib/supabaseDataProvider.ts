@@ -1,6 +1,6 @@
 // src/lib/supabaseDataProvider.ts
 import { DataProvider } from 'react-admin';
-import { supabase } from './lib/supabase';
+import { supabase } from './supabase';
 
 interface Params {
     pagination: { page: number; perPage: number };

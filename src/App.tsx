@@ -25,6 +25,12 @@ import ProductDetail from './components/storecomponents/ProductDetail';
 import { AdminDashboard } from './components/admincomponents/AdminDashboard';
 import AdminPanel from './components/admincomponents/AdminPanel';
 import { AdminLogin } from './components/admincomponents/AdminLogin';
+import { RemediesManagement } from './components/admincomponents/RemediesManagement';
+import { AilmentsManagement } from './components/admincomponents/AilmentsManagement';
+import { StoreManagement } from './components/admincomponents/StoreManagement';
+import { UsersManagement } from './components/admincomponents/UsersManagement';
+import { ConsultantsManagement } from './components/admincomponents/ConsultantsManagement';
+import { AdminSettings } from './components/admincomponents/AdminSettings';
 
 function App() {
   return (
@@ -50,13 +56,16 @@ function App() {
           
           {/* Admin Routes */}
           <Route path="/adminlogin" element={<AdminLogin />} />
-          <Route path="/admin/*" element={<AdminPanel />}>
+          <Route path="/admin" element={<AdminPanel />}>
             <Route index element={<AdminDashboard />} />
             <Route path="admindashboard" element={<AdminDashboard/>} />
-            <Route path="users" element={<div>Users Management (Coming Soon)</div>} />
-            <Route path="remedies" element={<div>Remedies Management (Coming Soon)</div>} />
+            <Route path="users" element={<UsersManagement />} />
+            <Route path="remedies" element={<RemediesManagement/>} />
+            <Route path="ailments" element={<AilmentsManagement/>} />
+            <Route path="consultants" element={<ConsultantsManagement />} />
+            <Route path="store" element={<StoreManagement/>} />
             <Route path="comments" element={<div>Comments Management (Coming Soon)</div>} />
-            <Route path="settings" element={<div>Admin Settings (Coming Soon)</div>} />
+            <Route path="settings" element={<AdminSettings/>} />
           </Route>
           
           {/* Search Route */}
