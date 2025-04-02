@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ThumbsUp, MessageSquare, AlertCircle, ArrowLeft, Loader2 } from 'lucide-react';
+import { ThumbsUp, MessageSquare, AlertCircle, ArrowLeft, Loader2, Bookmark } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/auth';
 import toast from 'react-hot-toast';
@@ -11,7 +11,7 @@ interface Comment {
   content: string;
   created_at: string;
   user_id: string;
-  profiles: {
+  user_profiles: {
     display_name: string;
     avatar_url: string;
   };
@@ -31,7 +31,7 @@ interface Remedy {
   comments_count: number;
   description?: string;
   is_liked?: boolean;
-  profiles: {
+  user_profiles: {
     display_name: string;
     avatar_url: string;
   };
@@ -49,13 +49,11 @@ function RemedyDetail() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isCheckingSave, setIsCheckingSave] = useState(true);
 
-  useEffect(() => {
-    window.scrollTo(0, 0);
-    fetchRemedy();
-  }, [slug]);
-
-  const fetchRemedy = async () => {
+  const fetchRemedy = useCallback(async () => {
     if (!slug) return;
 
     try {
@@ -66,7 +64,7 @@ function RemedyDetail() {
         .from('remedies')
         .select(`
           *,
-          profiles (
+          user_profiles (
             display_name,
             avatar_url
           )
@@ -78,33 +76,56 @@ function RemedyDetail() {
         throw remedyError;
       }
 
-      // Check if the current user has liked this remedy
-      let isLiked = false;
-      if (user) {
-        const { data: likeData } = await supabase
-          .from('remedy_likes')
-          .select('id')
-          .eq('remedy_id', remedyData.id)
-          .eq('user_id', user.id)
-          .single();
-        isLiked = !!likeData;
-      }
-
-      setRemedy({
-        ...remedyData,
-        is_liked: isLiked
-      });
-
       if (remedyData) {
+        setRemedy(remedyData);
         fetchComments(remedyData.id);
+
+        if (user) {
+          setIsCheckingSave(true);
+          const { data: likeData, error: likeError } = await supabase
+            .from('remedy_likes')
+            .select('id')
+            .eq('user_id', user.id)
+            .eq('remedy_id', remedyData.id)
+            .maybeSingle();
+
+          if (likeError) console.error("Error checking like status:", likeError);
+          else setRemedy(currentRemedy => currentRemedy ? { ...currentRemedy, is_liked: !!likeData } : null);
+
+          const { data: saveData, error: saveError, count: saveCount } = await supabase
+            .from('saved_remedies')
+            .select('id', { count: 'exact', head: true })
+            .eq('user_id', user.id)
+            .eq('remedy_id', remedyData.id);
+
+          if (saveError) {
+            console.error("Error checking save status:", saveError);
+            setIsSaved(false);
+          } else {
+            setIsSaved(saveCount !== null && saveCount > 0);
+          }
+          setIsCheckingSave(false);
+        } else {
+          setRemedy(currentRemedy => currentRemedy ? { ...currentRemedy, is_liked: false } : null);
+          setIsSaved(false);
+          setIsCheckingSave(false);
+        }
+      } else {
+        setError("Remedy not found.");
       }
     } catch (err: any) {
       setError(err.message || 'Failed to load remedy');
       toast.error('Failed to load remedy');
+      setIsCheckingSave(false);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [slug, user]);
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+    fetchRemedy();
+  }, [fetchRemedy]);
 
   const handleLike = async () => {
     if (!user) {
@@ -115,10 +136,12 @@ function RemedyDetail() {
     if (!remedy) return;
 
     setIsLiking(true);
+    const originalState = { is_liked: remedy.is_liked, likes_count: remedy.likes_count };
+
     try {
-      // Optimistic update
+      const currentLikes = remedy.likes_count || 0;
       const newIsLiked = !remedy.is_liked;
-      const newLikesCount = remedy.likes_count + (newIsLiked ? 1 : -1);
+      const newLikesCount = newIsLiked ? currentLikes + 1 : Math.max(0, currentLikes - 1);
       
       setRemedy({
         ...remedy,
@@ -127,53 +150,50 @@ function RemedyDetail() {
       });
 
       if (newIsLiked) {
-        // Like
-        const { error } = await supabase
-          .from('remedy_likes')
-          .insert({
-            remedy_id: remedy.id,
-            user_id: user.id
-          });
+        const { error: likeError } = await supabase
+          .from("remedy_likes")
+          .insert({ user_id: user.id, remedy_id: remedy.id });
+        if (likeError) throw likeError;
 
-        if (error) throw error;
+        const { error: incrementError } = await supabase.rpc('increment_remedy_likes', {
+          p_remedy_id: remedy.id
+        });
+        if (incrementError) throw incrementError;
 
-        // Update the remedy's like count
-        const { error: updateError } = await supabase
-          .from('remedies')
-          .update({ likes_count: newLikesCount })
-          .eq('id', remedy.id);
-
-        if (updateError) throw updateError;
-
-        toast.success('Added like');
+        toast.success("Added like!");
       } else {
-        // Unlike
-        const { error } = await supabase
-          .from('remedy_likes')
+        const { error: unlikeError } = await supabase
+          .from("remedy_likes")
           .delete()
-          .eq('remedy_id', remedy.id)
-          .eq('user_id', user.id);
+          .eq("user_id", user.id)
+          .eq("remedy_id", remedy.id);
+        if (unlikeError) throw unlikeError;
 
-        if (error) throw error;
+        const { error: decrementError } = await supabase.rpc('decrement_remedy_likes', {
+          p_remedy_id: remedy.id
+        });
+        if (decrementError) throw decrementError;
 
-        // Update the remedy's like count
-        const { error: updateError } = await supabase
-          .from('remedies')
-          .update({ likes_count: newLikesCount })
-          .eq('id', remedy.id);
-
-        if (updateError) throw updateError;
-
-        toast.success('Removed like');
+        toast.success("Removed like");
       }
     } catch (error: any) {
-      // Revert optimistic update on error
-      setRemedy({
-        ...remedy,
-        is_liked: !remedy.is_liked,
-        likes_count: remedy.likes_count + (remedy.is_liked ? 1 : -1)
-      });
-      toast.error('Failed to update like');
+      if (error?.code === '23505') {
+        console.warn("Attempted to insert duplicate like:", error);
+        toast.error("You've already liked this remedy.");
+        setRemedy(prevRemedy => prevRemedy ? {
+          ...prevRemedy, 
+          is_liked: true,
+          likes_count: originalState.likes_count
+        } : null);
+      } else {
+        setRemedy(prevRemedy => prevRemedy ? {
+          ...prevRemedy, 
+          is_liked: originalState.is_liked,
+          likes_count: originalState.likes_count
+        } : null);
+        console.error("Error handling like:", error);
+        toast.error(error.message || 'Failed to update like');
+      }
     } finally {
       setIsLiking(false);
     }
@@ -186,7 +206,7 @@ function RemedyDetail() {
         .from('remedy_comments')
         .select(`
           *,
-          profiles!inner (
+          user_profiles!inner (
             display_name,
             avatar_url
           )
@@ -215,13 +235,12 @@ function RemedyDetail() {
 
     setIsSubmittingComment(true);
     try {
-      // Optimistic update
       const optimisticComment: Comment = {
         id: Date.now().toString(),
         content: newComment,
         created_at: new Date().toISOString(),
         user_id: user.id,
-        profiles: {
+        user_profiles: {
           display_name: user.user_metadata.display_name || 'Anonymous',
           avatar_url: user.user_metadata.avatar_url || '/default-avatar.png'
         }
@@ -230,7 +249,6 @@ function RemedyDetail() {
       setComments([optimisticComment, ...comments]);
       setNewComment('');
 
-      // Add the comment
       const { error: commentError } = await supabase
         .from('remedy_comments')
         .insert({
@@ -241,7 +259,6 @@ function RemedyDetail() {
 
       if (commentError) throw commentError;
 
-      // Update the remedy's comment count
       const { error: updateError } = await supabase
         .from('remedies')
         .update({ comments_count: (remedy.comments_count || 0) + 1 })
@@ -254,16 +271,65 @@ function RemedyDetail() {
         comments_count: (remedy.comments_count || 0) + 1
       });
 
-      // Fetch fresh comments to ensure consistency
       fetchComments(remedy.id);
       toast.success('Comment added successfully!');
     } catch (error: any) {
-      // Revert optimistic updates
       setComments(comments);
       setNewComment(newComment);
       toast.error(error.message || 'Failed to add comment');
     } finally {
       setIsSubmittingComment(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!user) {
+      toast.error('Please sign in to save remedies');
+      navigate('/login');
+      return;
+    }
+    if (!remedy || isSaving) return;
+
+    setIsSaving(true);
+    const currentlySaved = isSaved;
+
+    setIsSaved(!currentlySaved);
+
+    try {
+      if (!currentlySaved) {
+        const { error } = await supabase
+          .from('saved_remedies')
+          .insert({
+            user_id: user.id,
+            remedy_id: remedy.id
+          });
+
+        if (error) {
+          if (error.code === '23505') {
+            console.warn("Attempted to save an already saved remedy (duplicate key).");
+            toast.error("Remedy is already saved.");
+          } else {
+            throw error;
+          }
+        } else {
+          toast.success('Remedy saved!');
+        }
+      } else {
+        const { error } = await supabase
+          .from('saved_remedies')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('remedy_id', remedy.id);
+
+        if (error) throw error;
+        toast.success('Remedy unsaved.');
+      }
+    } catch (error: any) {
+      setIsSaved(currentlySaved);
+      console.error("Error saving/unsaving remedy:", error);
+      toast.error(error.message || 'Failed to update saved status.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -323,16 +389,16 @@ function RemedyDetail() {
       >
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-3xl font-bold text-gray-800">{remedy.title}</h1>
-          {remedy.profiles && (
+          {remedy.user_profiles && (
             <div className="flex items-center gap-3">
               <img
-                src={remedy.profiles.avatar_url || '/default-avatar.png'}
-                alt={remedy.profiles.display_name}
+                src={remedy.user_profiles.avatar_url || '/default-avatar.png'}
+                alt={remedy.user_profiles.display_name}
                 className="w-8 h-8 rounded-full"
               />
               <div className="text-right">
                 <div className="text-sm text-gray-600">Posted by</div>
-                <div className="font-medium text-gray-900">{remedy.profiles.display_name}</div>
+                <div className="font-medium text-gray-900">{remedy.user_profiles.display_name}</div>
               </div>
             </div>
           )}
@@ -355,6 +421,18 @@ function RemedyDetail() {
             <MessageSquare className="h-5 w-5 text-emerald-600" />
             <span className="text-emerald-700">{remedy.comments_count || 0} comments</span>
           </div>
+          <button
+            onClick={handleSave}
+            disabled={isSaving || isCheckingSave || !user}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+              isSaved
+                ? 'bg-blue-100 text-blue-700'
+                : 'hover:bg-gray-100'
+            } ${!user || isCheckingSave ? 'opacity-50 cursor-not-allowed' : ''}`}
+          >
+            <Bookmark className={`h-5 w-5 ${isSaved ? 'fill-current' : ''}`} />
+            <span>{isSaving ? 'Saving...' : (isSaved ? 'Saved' : 'Save')}</span>
+          </button>
         </div>
 
         <div className="flex flex-wrap gap-2 mb-6">
@@ -442,12 +520,12 @@ function RemedyDetail() {
                     >
                       <div className="flex items-center mb-2">
                         <img
-                          src={comment.profiles.avatar_url || '/default-avatar.png'}
-                          alt={comment.profiles.display_name}
+                          src={comment.user_profiles.avatar_url || '/default-avatar.png'}
+                          alt={comment.user_profiles.display_name}
                           className="w-8 h-8 rounded-full mr-2"
                         />
                         <div>
-                          <span className="font-medium">{comment.profiles.display_name}</span>
+                          <span className="font-medium">{comment.user_profiles.display_name}</span>
                           <span className="text-gray-500 text-sm ml-2">
                             {new Date(comment.created_at).toLocaleDateString()}
                           </span>

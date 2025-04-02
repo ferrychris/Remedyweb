@@ -16,6 +16,13 @@ import AilmentDetail from './components/AilmentDetail';
 // User Components
 import ConsultDoctor from './components/ConsultDoctor';
 import { Dashboard } from './components/userdashboard/Dashboard';
+import ManageAvailability from './components/consultantsdash/ManageAvailability';
+import { NewUserDashboard } from './components/userdashboard/newuserdashboard.tsx';
+import Overview from './components/userdashboard/Overview';
+import Consultations from './components/userdashboard/Consultations';
+import SavedRemedies from './components/userdashboard/SavedRemedies';
+import HealthTracking from './components/userdashboard/HealthTracking';
+import Orders from './components/userdashboard/Orders';
 
 // Store Components
 import Store from './components/storecomponents/Store';
@@ -46,9 +53,22 @@ function App() {
           <Route path="/ailments" element={<Ailments />} />
           <Route path="/ailments/:slug" element={<AilmentDetail />} />
           
-          {/* User Routes */}
+          {/* New User Dashboard Routes (Nested) */}
+          <Route path="/ndashboard" element={<NewUserDashboard />}>
+            <Route index element={<Overview />} /> {/* Default view */}
+            <Route path="overview" element={<Overview />} />
+            <Route path="consultations" element={<Consultations />} />
+            <Route path="saved-remedies" element={<SavedRemedies />} />
+            <Route path="health-tracking" element={<HealthTracking />} />
+            <Route path="orders" element={<Orders />} />
+          </Route>
+          
+          {/* Old User Dashboard Route (keep or remove as needed) */}
           <Route path="/dashboard" element={<Dashboard />} />
+          
+          {/* Other User Routes */}
           <Route path="/consult" element={<ConsultDoctor />} />
+          <Route path="/consultant/availability" element={<ManageAvailability />} />
           
           {/* Store Routes */}
           <Route path="/store" element={<Store />} />

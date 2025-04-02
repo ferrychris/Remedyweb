@@ -1,9 +1,12 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../lib/auth';
 import toast from 'react-hot-toast';
 import { AuthModal } from '../AuthModal';
 import { supabase } from '../../lib/supabase';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { ArrowLeft, Loader2, Heart, MessageSquare } from 'lucide-react';
+import BookingModal from './consultation/BookingModal';
+import { motion } from 'framer-motion';
 
 interface UserActivity {
   consultations: any[];
@@ -12,16 +15,29 @@ interface UserActivity {
   savedAilments: any[];
 }
 
+interface AvailableConsultant {
+    id: string;
+    name: string;
+    specialty?: string;
+    bio?: string;
+}
+
 export function Dashboard() {
+  const navigate = useNavigate();
   const { user, profile, signOut } = useAuth();
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadingConsultants, setLoadingConsultants] = useState(true);
   const [userActivity, setUserActivity] = useState<UserActivity>({
     consultations: [],
     orders: [],
     savedRemedies: [],
     savedAilments: [],
   });
+  const [availableConsultants, setAvailableConsultants] = useState<AvailableConsultant[]>([]);
+
+  const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
+  const [selectedConsultant, setSelectedConsultant] = useState<AvailableConsultant | null>(null);
 
   useEffect(() => {
     async function fetchUserActivity() {
@@ -57,7 +73,8 @@ export function Dashboard() {
           .eq('user_id', user.id);
 
         if (consultError || orderError || remedyError || ailmentError) {
-          throw new Error('Error fetching user activity');
+          console.error('Error fetching some user activity:', { consultError, orderError, remedyError, ailmentError });
+          toast.error('Failed to load some user activity data.');
         }
 
         setUserActivity({
@@ -68,14 +85,59 @@ export function Dashboard() {
         });
       } catch (error) {
         toast.error('Failed to load user activity');
-        console.error('Error:', error);
+        console.error('Error fetching user activity:', error);
       } finally {
         setLoading(false);
       }
     }
-
-    fetchUserActivity();
+    if (user) {
+        fetchUserActivity();
+    } else {
+        setLoading(false);
+        setLoadingConsultants(false);
+    }
   }, [user]);
+
+  const fetchConsultantsWithAvailability = useCallback(async () => {
+      setLoadingConsultants(true);
+      try {
+          const { data: availableSlots, error: slotError } = await supabase
+              .from('availability_slots')
+              .select('consultant_id')
+              .eq('is_booked', false)
+              .gt('start_time', new Date().toISOString());
+
+          if (slotError) throw slotError;
+          if (!availableSlots || availableSlots.length === 0) {
+              setAvailableConsultants([]);
+          } else {
+              const uniqueConsultantIds = [...new Set(availableSlots.map(slot => slot.consultant_id))];
+
+              const { data: consultants, error: consultantError } = await supabase
+                  .from('consultants')
+                  .select('id, name, specialty, bio')
+                  .in('id', uniqueConsultantIds);
+
+              if (consultantError) throw consultantError;
+
+              setAvailableConsultants(consultants || []);
+          }
+
+      } catch (error: any) {
+          console.error("Error fetching available consultants:", error);
+          toast.error("Failed to load available consultants.");
+          setAvailableConsultants([]);
+      } finally {
+          setLoadingConsultants(false);
+          setLoading(false);
+      }
+  }, []);
+
+  useEffect(() => {
+      if (user) {
+         fetchConsultantsWithAvailability();
+      } 
+  }, [user, fetchConsultantsWithAvailability]);
 
   const handleSignOut = async () => {
     try {
@@ -86,146 +148,195 @@ export function Dashboard() {
     }
   };
 
+  const openBookingModal = (consultant: AvailableConsultant) => {
+      if (!user) {
+          toast.error("Please log in to book a consultation.");
+          return;
+      }
+      setSelectedConsultant(consultant);
+      setIsBookingModalOpen(true);
+  }
+
+  const closeBookingModal = () => {
+      setIsBookingModalOpen(false);
+      setSelectedConsultant(null);
+      fetchConsultantsWithAvailability();
+  }
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500"></div>
+      <div className="max-w-4xl mx-auto py-8 px-4">
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-emerald-500" />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-6xl mx-auto p-6">
-      <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-        <div className="flex justify-between items-center mb-6">
+    <div className="max-w-4xl mx-auto py-8 px-4 space-y-8">
+      <div className="flex items-center">
+        <button 
+          onClick={() => navigate(-1)} 
+          className="text-emerald-600 hover:text-emerald-700 flex items-center"
+        >
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          Back
+        </button>
+      </div>
+
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="bg-white rounded-xl p-8 shadow-sm"
+      >
+        <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-gray-800">Welcome, {profile?.display_name || 'User'}</h1>
-            <p className="text-sm text-gray-600 mt-1">User ID: {user?.id}</p>
+            <h1 className="text-3xl font-bold text-gray-800">Welcome, {profile?.display_name || 'User'}</h1>
+            <p className="text-sm text-gray-600 mt-1">{user?.email}</p>
           </div>
           <button
             onClick={handleSignOut}
-            className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
+            className="text-red-600 hover:text-red-700 px-4 py-2 rounded-lg border border-red-200 hover:bg-red-50 transition-colors"
           >
             Sign Out
           </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-gray-50 p-4 rounded-lg">
-            <h2 className="text-lg font-semibold mb-2">Profile Information</h2>
-            <div className="space-y-2">
-              <p><span className="font-medium">Email:</span> {user?.email}</p>
+        <div className="space-y-8">
+          {/* Profile Section */}
+          <div>
+            <h2 className="text-2xl font-bold text-gray-800 mb-4">Profile Information</h2>
+            <div className="bg-gray-50 rounded-xl p-6 space-y-3">
               <p><span className="font-medium">Display Name:</span> {profile?.display_name || 'Not set'}</p>
               <p><span className="font-medium">Bio:</span> {profile?.bio || 'No bio yet'}</p>
               <p><span className="font-medium">Member Since:</span> {new Date(profile?.created_at || '').toLocaleDateString()}</p>
             </div>
           </div>
 
-          <div className="bg-gray-50 p-4 rounded-lg">
-            <h2 className="text-lg font-semibold mb-2">Quick Actions</h2>
-            <div className="space-y-4">
+          {/* Quick Actions */}
+          <div>
+            <h2 className="text-2xl font-bold text-gray-800 mb-4">Quick Actions</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Link
                 to="/remedies"
-                className="block w-full bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors text-center"
+                className="flex items-center justify-center gap-2 px-4 py-3 bg-emerald-500 text-white rounded-xl hover:bg-emerald-600 transition-colors font-medium"
               >
                 Browse Remedies
               </Link>
               <Link
                 to="/ailments"
-                className="block w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-center"
+                className="flex items-center justify-center gap-2 px-4 py-3 bg-emerald-500 text-white rounded-xl hover:bg-emerald-600 transition-colors font-medium"
               >
                 View Ailments
               </Link>
             </div>
           </div>
-        </div>
-      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Saved Remedies */}
-        <div className="bg-white rounded-lg shadow-lg p-6">
-          <h2 className="text-xl font-semibold mb-4">Saved Remedies</h2>
-          {userActivity.savedRemedies.length > 0 ? (
-            <div className="space-y-4">
-              {userActivity.savedRemedies.map((item: any) => (
-                <Link
-                  key={item.id}
-                  to={`/remedies/${item.remedies.slug}`}
-                  className="block p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
-                >
-                  <h3 className="font-medium">{item.remedies.title}</h3>
-                  <p className="text-sm text-gray-600">Saved on: {new Date(item.created_at).toLocaleDateString()}</p>
-                </Link>
-              ))}
+          {/* Consultations Section */}
+          <div>
+            <h2 className="text-2xl font-bold text-gray-800 mb-4">Available Consultants</h2>
+            {loadingConsultants && (
+              <div className="flex justify-center py-8">
+                <Loader2 className="h-8 w-8 animate-spin text-emerald-500" />
+              </div>
+            )}
+            
+            {!loadingConsultants && availableConsultants.length === 0 && (
+              <p className="text-gray-600 bg-gray-50 rounded-xl p-6">No consultants currently available for booking.</p>
+            )}
+            
+            {!loadingConsultants && availableConsultants.length > 0 && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {availableConsultants.map(consultant => (
+                  <div key={consultant.id} className="bg-gray-50 rounded-xl p-6 hover:bg-gray-100 transition-colors">
+                    <h3 className="font-semibold text-lg text-gray-800">{consultant.name}</h3>
+                    {consultant.specialty && (
+                      <p className="text-sm text-emerald-600 mt-1">{consultant.specialty}</p>
+                    )}
+                    {consultant.bio && (
+                      <p className="text-sm text-gray-600 mt-2 line-clamp-2">{consultant.bio}</p>
+                    )}
+                    <button
+                      onClick={() => openBookingModal(consultant)}
+                      className="mt-4 w-full bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-emerald-600 transition-colors"
+                    >
+                      Book Consultation
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Activity Section */}
+          <div>
+            <h2 className="text-2xl font-bold text-gray-800 mb-4">Your Activity</h2>
+            
+            {/* Saved Remedies */}
+            <div className="space-y-6">
+              <div>
+                <h3 className="text-xl font-semibold text-gray-800 mb-3">Saved Remedies</h3>
+                {userActivity.savedRemedies.length > 0 ? (
+                  <div className="space-y-3">
+                    {userActivity.savedRemedies.map((saved) => (
+                      <Link 
+                        key={saved.id} 
+                        to={`/remedies/${saved.remedies.slug}`}
+                        className="block bg-gray-50 rounded-xl p-4 hover:bg-gray-100 transition-colors"
+                      >
+                        <h4 className="font-medium text-gray-800">{saved.remedies.title}</h4>
+                        {saved.remedies.description && (
+                          <p className="text-sm text-gray-600 mt-1 line-clamp-2">{saved.remedies.description}</p>
+                        )}
+                      </Link>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-gray-600 bg-gray-50 rounded-xl p-4">You haven't saved any remedies yet.</p>
+                )}
+              </div>
+
+              {/* Recent Consultations */}
+              <div>
+                <h3 className="text-xl font-semibold text-gray-800 mb-3">Recent Consultations</h3>
+                {userActivity.consultations.length > 0 ? (
+                  <div className="space-y-3">
+                    {userActivity.consultations.slice(0, 3).map((consultation) => (
+                      <div key={consultation.id} className="bg-gray-50 rounded-xl p-4">
+                        <div className="flex justify-between items-start">
+                          <h4 className="font-medium text-gray-800">
+                            {consultation.consultant_name || 'Consultation'}
+                          </h4>
+                          <span className="text-sm text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full">
+                            {consultation.status}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-600 mt-1">
+                          {new Date(consultation.start_time).toLocaleString()}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-gray-600 bg-gray-50 rounded-xl p-4">No consultations yet.</p>
+                )}
+              </div>
             </div>
-          ) : (
-            <p className="text-gray-600">No saved remedies yet</p>
-          )}
+          </div>
         </div>
+      </motion.div>
 
-        {/* Saved Ailments */}
-        <div className="bg-white rounded-lg shadow-lg p-6">
-          <h2 className="text-xl font-semibold mb-4">Saved Ailments</h2>
-          {userActivity.savedAilments.length > 0 ? (
-            <div className="space-y-4">
-              {userActivity.savedAilments.map((item: any) => (
-                <Link
-                  key={item.id}
-                  to={`/ailments/${item.ailments.slug}`}
-                  className="block p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
-                >
-                  <h3 className="font-medium">{item.ailments.name}</h3>
-                  <p className="text-sm text-gray-600">Saved on: {new Date(item.created_at).toLocaleDateString()}</p>
-                </Link>
-              ))}
-            </div>
-          ) : (
-            <p className="text-gray-600">No saved ailments yet</p>
-          )}
-        </div>
-
-        {/* Past Consultations */}
-        <div className="bg-white rounded-lg shadow-lg p-6">
-          <h2 className="text-xl font-semibold mb-4">Past Consultations</h2>
-          {userActivity.consultations.length > 0 ? (
-            <div className="space-y-4">
-              {userActivity.consultations.map((consultation: any) => (
-                <div key={consultation.id} className="p-3 bg-gray-50 rounded-lg">
-                  <h3 className="font-medium">Consultation #{consultation.id}</h3>
-                  <p className="text-sm text-gray-600">Date: {new Date(consultation.created_at).toLocaleDateString()}</p>
-                  <p className="text-sm text-gray-600">Status: {consultation.status}</p>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-gray-600">No consultations yet</p>
-          )}
-        </div>
-
-        {/* Order History */}
-        <div className="bg-white rounded-lg shadow-lg p-6">
-          <h2 className="text-xl font-semibold mb-4">Order History</h2>
-          {userActivity.orders.length > 0 ? (
-            <div className="space-y-4">
-              {userActivity.orders.map((order: any) => (
-                <div key={order.id} className="p-3 bg-gray-50 rounded-lg">
-                  <h3 className="font-medium">Order #{order.id}</h3>
-                  <p className="text-sm text-gray-600">Date: {new Date(order.created_at).toLocaleDateString()}</p>
-                  <p className="text-sm text-gray-600">Status: {order.status}</p>
-                  <p className="text-sm font-medium text-green-600">Total: ${order.total}</p>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-gray-600">No orders yet</p>
-          )}
-        </div>
-      </div>
-
-      <AuthModal
-        isOpen={showAuthModal}
-        onClose={() => setShowAuthModal(false)}
-      />
+      {/* Modals */}
+      {selectedConsultant && (
+        <BookingModal
+          isOpen={isBookingModalOpen}
+          onClose={closeBookingModal}
+          consultant={selectedConsultant}
+        />
+      )}
+      
+      <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
     </div>
   );
 }

@@ -20,9 +20,12 @@ interface Remedy {
   comments_count: number;
   description?: string;
   image?: string;
-  profiles?: {
+  user_profile?: {
+    id: string;
     display_name: string;
     avatar_url: string;
+    created_at: string;
+    updated_at: string;
   };
 }
 
@@ -36,7 +39,7 @@ function Remedies() {
 
   useEffect(() => {
     fetchRemedies();
-  }, [searchQuery, selectedAilment]);
+  }, []);
 
   const handleLike = async (remedyId: number) => {
     if (!user) {
@@ -64,13 +67,16 @@ function Remedies() {
   
         if (unlikeError) throw unlikeError;
   
-        // Update likes count in remedies table
-        const { error: updateError } = await supabase
-          .from("remedies")
-          .update({ likes_count: supabase.raw('likes_count - 1') })
-          .eq("id", remedyId);
+        // Decrement likes count using RPC
+        const { error: decrementError } = await supabase.rpc('decrement_remedy_likes', {
+          p_remedy_id: remedyId
+        });
+        if (decrementError) {
+            console.error('Decrement RPC error:', decrementError);
+            // Decide if we should throw or just show toast
+            throw new Error(`Failed to update like count: ${decrementError.message}`); 
+        }
   
-        if (updateError) throw updateError;
         toast.success("Removed like");
       } else {
         // Like the remedy
@@ -83,13 +89,16 @@ function Remedies() {
     
         if (likeError) throw likeError;
     
-        // Update likes count in remedies table
-        const { error: updateError } = await supabase
-          .from("remedies")
-          .update({ likes_count: supabase.raw('likes_count + 1') })
-          .eq("id", remedyId);
-    
-        if (updateError) throw updateError;
+         // Increment likes count using RPC
+         const { error: incrementError } = await supabase.rpc('increment_remedy_likes', {
+           p_remedy_id: remedyId
+         });
+         if (incrementError) {
+             console.error('Increment RPC error:', incrementError);
+             // Decide if we should throw or just show toast
+            throw new Error(`Failed to update like count: ${incrementError.message}`); 
+         }
+
         toast.success("Added like!");
       }
       
@@ -107,20 +116,15 @@ function Remedies() {
         .from('remedies')
         .select(`
           *,
-          profiles (
+          user_profile:user_id (
+            id,
             display_name,
-            avatar_url
+            avatar_url,
+            created_at,
+            updated_at
           )
         `)
         .order('created_at', { ascending: false });
-
-      if (searchQuery) {
-        query = query.ilike('title', `%${searchQuery}%`);
-      }
-
-      if (selectedAilment !== 'all') {
-        query = query.contains('ailments', [selectedAilment]);
-      }
 
       const { data, error } = await query;
 
@@ -131,6 +135,15 @@ function Remedies() {
       toast.error('Failed to load remedies');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const formatDate = (isoString: string | undefined) => {
+    if (!isoString) return 'N/A';
+    try {
+      return new Date(isoString).toLocaleDateString();
+    } catch (e) {
+      return 'Invalid Date';
     }
   };
 
@@ -204,20 +217,28 @@ function Remedies() {
               >
                 <div className="p-6">
                   <Link to={`/remedies/${remedy.slug}`}>
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-xl font-semibold text-gray-900">
+                    <div className="flex items-start justify-between mb-3">
+                      <h3 className="text-xl font-semibold text-gray-900 mr-2">
                         {remedy.title}
                       </h3>
-                      {remedy.profiles && (
-                        <div className="flex items-center gap-2">
+                      {remedy.user_profile && (
+                        <div className="flex items-center gap-2 text-right flex-shrink-0">
+                          <div className="flex-shrink-0">
+                            <span className="block text-sm text-gray-600 font-medium">
+                              {remedy.user_profile.display_name}
+                            </span>
+                            <span className="block text-xs text-gray-400">
+                              ID: {remedy.user_profile.id.substring(0, 8)}...
+                            </span>
+                            <span className="block text-xs text-gray-400">
+                              Joined: {formatDate(remedy.user_profile.created_at)}
+                            </span>
+                          </div>
                           <img
-                            src={remedy.profiles.avatar_url || '/default-avatar.png'}
-                            alt={remedy.profiles.display_name}
-                            className="w-6 h-6 rounded-full"
+                            src={remedy.user_profile.avatar_url || '/default-avatar.png'}
+                            alt={remedy.user_profile.display_name}
+                            className="w-8 h-8 rounded-full ml-2 flex-shrink-0"
                           />
-                          <span className="text-sm text-gray-600">
-                            {remedy.profiles.display_name}
-                          </span>
                         </div>
                       )}
                     </div>
