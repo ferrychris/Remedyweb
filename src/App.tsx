@@ -18,11 +18,9 @@ import ConsultDoctor from './components/ConsultDoctor';
 import { Dashboard } from './components/userdashboard/Dashboard';
 import ManageAvailability from './components/consultantsdash/ManageAvailability';
 import { NewUserDashboard } from './components/userdashboard/newuserdashboard.tsx';
-import Overview from './components/userdashboard/Overview';
-import Consultations from './components/userdashboard/Consultations';
+import { Overview } from './components/userdashboard/Overview.tsx';
 import SavedRemedies from './components/userdashboard/SavedRemedies';
-import HealthTracking from './components/userdashboard/HealthTracking';
-import Orders from './components/userdashboard/Orders';
+
 
 // Store Components
 import Store from './components/storecomponents/Store';
@@ -38,6 +36,10 @@ import { StoreManagement } from './components/admincomponents/StoreManagement';
 import { UsersManagement } from './components/admincomponents/UsersManagement';
 import { ConsultantsManagement } from './components/admincomponents/ConsultantsManagement';
 import { AdminSettings } from './components/admincomponents/AdminSettings';
+import { HealthTracking } from './components/userdashboard/HealthTracking.tsx';
+import { Orders } from './components/userdashboard/Orders.tsx';
+import { Consultations } from './components/userdashboard/Consultations.tsx';
+
 
 function App() {
   return (
@@ -56,8 +58,8 @@ function App() {
           {/* New User Dashboard Routes (Nested) */}
           <Route path="/ndashboard" element={<NewUserDashboard />}>
             <Route index element={<Overview />} /> {/* Default view */}
-            <Route path="overview" element={<Overview />} />
-            <Route path="consultations" element={<Consultations />} />
+            <Route path="overview" element={<Overview/>} />
+            <Route path="consultations" element={<Consultations/>} />
             <Route path="saved-remedies" element={<SavedRemedies />} />
             <Route path="health-tracking" element={<HealthTracking />} />
             <Route path="orders" element={<Orders />} />
