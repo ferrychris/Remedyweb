@@ -32,20 +32,15 @@ export function NewUserDashboard() {
             <Bookmark className="h-5 w-5 mr-2" />
             Saved Remedies
           </Link>
-          <Link to="/ndashboard/health-tracking" className="flex items-center text-gray-600 hover:text-emerald-700">
-            <BookOpen className="h-5 w-5 mr-2" />
-            Health Tracking
-          </Link>
+          
           <Link to="/ndashboard/orders" className="flex items-center text-gray-600 hover:text-emerald-700">
             <ShoppingBag className="h-5 w-5 mr-2" />
             Orders
           </Link>
         </nav>
-        <div className="mt-8">
-          <button className="w-full text-red-600 hover:text-red-700">Sign Out</button>
-          <button className="w-full mt-4 bg-emerald-500 text-white py-2 rounded-lg hover:bg-emerald-600">
-            Upgrade to Pro
-          </button>
+        <div className="mt-8 py-14">
+          <button className="w-full text-red-600  hover:text-red-700">Sign Out</button>
+          
         </div>
       </aside>
 

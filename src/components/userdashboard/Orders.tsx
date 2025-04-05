@@ -43,7 +43,6 @@ export function Orders() {
 
         if (ordersError) throw ordersError;
 
-        // Fetch order items for each order
         const ordersWithItems = await Promise.all(
           ordersData.map(async (order) => {
             const { data: itemsData, error: itemsError } = await supabase
@@ -69,6 +68,28 @@ export function Orders() {
     fetchOrders();
   }, [user]);
 
+  // ✅ FIXED: Move cancel handler above return
+  const handleCancelOrder = async (orderId: string) => {
+    try {
+      const { error } = await supabase
+        .from('orders')
+        .update({ status: 'cancelled' })
+        .eq('id', orderId);
+
+      if (error) throw error;
+
+      toast.success('Order cancelled successfully');
+      setOrders((prevOrders) =>
+        prevOrders.map((order) =>
+          order.id === orderId ? { ...order, status: 'cancelled' } : order
+        )
+      );
+    } catch (error) {
+      toast.error('Failed to cancel order');
+      console.error('Cancel order error:', error);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-full">
@@ -81,11 +102,8 @@ export function Orders() {
     <div className="p-6">
       <h1 className="text-2xl font-bold text-gray-800 mb-6">Orders</h1>
 
-      {/* Welcome Banner */}
       <div className="bg-green-100 p-4 rounded-lg mb-6">
-        <h2 className="text-xl font-semibold text-green-800">
-          Your Order History
-        </h2>
+        <h2 className="text-xl font-semibold text-green-800">Your Order History</h2>
         <p className="text-green-600">View and manage your past orders here.</p>
       </div>
 
@@ -97,35 +115,19 @@ export function Orders() {
             <table className="min-w-full divide-y divide-gray-200">
               <thead>
                 <tr>
-                  <th className="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Order ID
-                  </th>
-                  <th className="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Date
-                  </th>
-                  <th className="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Shipping Address
-                  </th>
-                  <th className="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Items
-                  </th>
-                  <th className="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Total
-                  </th>
-                  <th className="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="px-6 py-3 bg-gray-50 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
+                  <th className="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order ID</th>
+                  <th className="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                  <th className="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Shipping Address</th>
+                  <th className="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Items</th>
+                  <th className="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
+                  <th className="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-3 bg-gray-50 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {orders.map((order) => (
                   <tr key={order.id}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {order.id.slice(0, 8)}...
-                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{order.id.slice(0, 8)}...</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {new Date(order.created_at).toLocaleDateString()}
                     </td>
@@ -144,8 +146,9 @@ export function Orders() {
                       <ul className="list-disc list-inside">
                         {order.order_items.map((item) => (
                           <li key={item.id}>
-                            {item.product.name} (x{item.quantity}) - $
-                            {(item.price_at_purchase * item.quantity).toFixed(2)}
+                            {item.product.name} (x{item.quantity}) - ${(
+                              item.price_at_purchase * item.quantity
+                            ).toFixed(2)}
                           </li>
                         ))}
                       </ul>
@@ -187,27 +190,6 @@ export function Orders() {
       )}
     </div>
   );
-
-  // Cancel order function
-  const handleCancelOrder = async (orderId: string) => {
-    try {
-      const { error } = await supabase
-        .from('orders')
-        .update({ status: 'cancelled' })
-        .eq('id', orderId);
-
-      if (error) throw error;
-      toast.success('Order cancelled successfully');
-      setOrders(
-        orders.map((order) =>
-          order.id === orderId ? { ...order, status: 'cancelled' } : order
-        )
-      );
-    } catch (error) {
-      toast.error('Failed to cancel order');
-      console.error('Cancel order error:', error);
-    }
-  };
 }
 
 export default Orders;
