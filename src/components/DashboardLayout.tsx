@@ -1,6 +1,6 @@
 import React from 'react';
+// import Navbar from './Navbar'; // This import is unused
 import { Outlet, useLocation } from 'react-router-dom';
-import Navbar from './Navbar';
 import Footer from './Footer';
 
 /**

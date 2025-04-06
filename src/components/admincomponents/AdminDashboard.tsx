@@ -23,11 +23,14 @@ interface Product {
 
 interface Consultant {
   id: string;
-  name: string;
+  user_id: string;
   email: string;
+  first_name: string;
+  last_name: string;
   specialty: string;
-  status: 'active' | 'inactive';
+  status: string;
   created_at: string;
+  bio: string;
 }
 
 interface OrderItem {
@@ -458,20 +461,12 @@ export function AdminDashboard() {
                     </tr>
                   ) : (
                     consultants.map((consultant) => (
-                      <tr key={consultant.id}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {consultant.name || 'N/A'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {consultant.email || 'N/A'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {consultant.specialty || 'N/A'}
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-500 max-w-[300px] truncate">
-                          {consultant.bio || 'N/A'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
+                      <tr key={consultant.id} className="border-b last:border-b-0">
+                        <td className="py-3 px-4">{consultant.first_name} {consultant.last_name}</td>
+                        <td className="py-3 px-4">{consultant.email}</td>
+                        <td className="py-3 px-4">{consultant.specialty}</td>
+                        <td className="py-3 px-4">{consultant.bio}</td>
+                        <td className="py-3 px-4">
                           <span
                             className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
                               consultant.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
@@ -480,10 +475,8 @@ export function AdminDashboard() {
                             {consultant.status}
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {new Date(consultant.created_at).toLocaleDateString()}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <td className="py-3 px-4">{new Date(consultant.created_at).toLocaleDateString()}</td>
+                        <td className="py-3 px-4">
                           <button
                             onClick={async () => {
                               const { error } = await supabase

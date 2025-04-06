@@ -9,10 +9,18 @@ import {
   Activity,
   UserCircle,
   Search,
+  Menu,
+  X,
+  ShoppingCart,
+  Bell,
+  ChevronDown,
+  LogOut,
 } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { AuthModal } from "./AuthModal";
 import { SearchBar } from "./SearchBar";
+import { motion, AnimatePresence } from 'framer-motion';
+import UserNavbar from './userdashboard/UserNavbar';
 
 function Navbar() {
   const { user, profile, isAdmin, signOut } = useAuth();
