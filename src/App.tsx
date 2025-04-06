@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { Routes, Route } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 
 // Public Components
@@ -17,13 +17,12 @@ import AilmentDetail from './components/AilmentDetail';
 import ConsultDoctor from './components/ConsultDoctor';
 import { Dashboard } from './components/userdashboard/Dashboard';
 import ManageAvailability from './components/consultantsdash/ManageAvailability';
-import { NewUserDashboard } from './components/userdashboard/newuserdashboard.tsx';
-import { Overview } from './components/userdashboard/Overview.tsx';
+import { NewUserDashboard } from './components/userdashboard/newuserdashboard';
+import { Overview } from './components/userdashboard/Overview';
 import SavedRemedies from './components/userdashboard/SavedRemedies';
 
-
 // Store Components
-import Store from './components/storecomponents/Store';
+import { Store } from './components/storecomponents/Store';
 import ProductDetail from './components/storecomponents/ProductDetail';
 
 // Admin Components
@@ -34,12 +33,12 @@ import { RemediesManagement } from './components/admincomponents/RemediesManagem
 import { AilmentsManagement } from './components/admincomponents/AilmentsManagement';
 import { StoreManagement } from './components/admincomponents/StoreManagement';
 import { UsersManagement } from './components/admincomponents/UsersManagement';
-import { ConsultantsManagement } from './components/admincomponents/ConsultantsManagement.tsx';
+import { ConsultantsManagement } from './components/admincomponents/ConsultantsManagement';
 import { AdminSettings } from './components/admincomponents/AdminSettings';
-import { HealthTracking } from './components/userdashboard/HealthTracking.tsx';
-import { Orders } from './components/userdashboard/Orders.tsx';
-import { Consultations } from './components/userdashboard/Consultations.tsx';
-import ConsultantDashboard from './components/consultantsdash/ConsultantDashboard.tsx';
+import { HealthTracking } from './components/userdashboard/HealthTracking';
+import { Orders } from './components/userdashboard/Orders';
+import { Consultations } from './components/userdashboard/Consultations';
+import ConsultantDashboard from './components/consultantsdash/ConsultantDashboard';
 
 
 function App() {
@@ -73,13 +72,8 @@ function App() {
           <Route path="/consult" element={<ConsultDoctor />} />
           <Route path="/consultant/availability" element={<ManageAvailability />} />
 
-
-
           {/* Consultants route */}
-          
           <Route path="/consultantDashboard" element={< ConsultantDashboard/>} />
-
-
 
           {/* Store Routes */}
           <Route path="/store" element={<Store />} />

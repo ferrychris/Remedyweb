@@ -3,24 +3,26 @@ import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../lib/auth';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
+import { Consultant } from '../../../types';
 
 // Re-use or refine the AvailabilitySlot interface
-interface AvailabilitySlot {
+interface SlotData {
     id: string;
     start_time: string;
     end_time: string;
-    // We only fetch non-booked slots, so is_booked is implicitly false here
 }
 
-// Interface for Consultants, including their available slots
+// Define our own interface without extending from types.ts
 interface ConsultantWithSlots {
-    id: string; // consultant's primary key id
+    id: string;
     name: string;
-    email?: string; // Optional based on RLS
-    specialty?: string;
+    email?: string;
+    phone?: string;
     bio?: string;
-    // Nested array of available slots for this consultant
-    availability_slots: AvailabilitySlot[];
+    specialty: string;
+    status: 'active' | 'inactive';
+    is_active: boolean;
+    availability_slots: SlotData[];
 }
 
 function ConsultationBooking() {
@@ -30,83 +32,85 @@ function ConsultationBooking() {
     const [loading, setLoading] = useState(true);
     const [bookingInProgress, setBookingInProgress] = useState<string | null>(null); // Store ID of slot being booked
     const [error, setError] = useState<string | null>(null);
+    const [selectedConsultant, setSelectedConsultant] = useState<string | null>(null);
+    const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
+    const [bookingLoading, setBookingLoading] = useState(false);
 
     // Fetch consultants and their available (future, non-booked) slots
     const fetchAvailableConsultants = useCallback(async () => {
         setLoading(true);
         setError(null);
         try {
-             // We fetch slots first, then group by consultant
-             // Ensure start_time is in the future and is_booked is false
+            // First fetch all active consultants
+            const { data: consultantsData, error: consultantsError } = await supabase
+                .from('consultants')
+                .select('*')
+                .eq('is_active', true)
+                .eq('status', 'active');
+
+            if (consultantsError) throw consultantsError;
+
+            if (!consultantsData || consultantsData.length === 0) {
+                setConsultants([]);
+                console.log('No active consultants found');
+                setLoading(false);
+                return;
+            }
+
+            // Then fetch available slots for these consultants
             const { data: availableSlots, error: slotsError } = await supabase
                 .from('availability_slots')
                 .select(`
-                    id,
-                    start_time,
-                    end_time,
-                    consultant_id,
-                    consultants (
-                        id,
-                        name,
-                        specialty,
-                        bio
-                    )
+                    *,
+                    consultants!inner(*)
                 `)
                 .eq('is_booked', false)
-                .gt('start_time', new Date().toISOString()) // Only fetch future slots
+                .gt('start_time', new Date().toISOString())
                 .order('start_time', { ascending: true });
 
             if (slotsError) throw slotsError;
 
-            if (!availableSlots) {
-                 setConsultants([]);
-                 return;
+            if (!availableSlots || availableSlots.length === 0) {
+                setConsultants([]);
+                console.log('No available slots found');
+                setLoading(false);
+                return;
             }
 
-            // Group slots by consultant using a Map
-             const consultantsMap = new Map<string, ConsultantWithSlots>();
+            // Process the data to group slots by consultant
+            const consultantsMap = new Map<string, ConsultantWithSlots>();
 
-             availableSlots.forEach(slot => {
-                 // Check if consultants data exists and is an array with at least one element
-                 const consultantDataArray = slot.consultants as any; // Cast to any temporarily to check structure
-                 if (!consultantDataArray || !Array.isArray(consultantDataArray) || consultantDataArray.length === 0) {
-                     console.warn(`Skipping slot ${slot.id} due to missing or invalid consultant data.`);
-                     return; // Skip this slot if consultant data is bad
-                 }
-                 // Access the first consultant object from the array
-                 const consultantData = consultantDataArray[0];
+            availableSlots.forEach(slot => {
+                // Check if consultants data exists and is an array with at least one element
+                const consultantData = slot.consultants as Consultant; 
+                if (!consultantData || !consultantData.id) {
+                    console.warn(`Skipping slot ${slot.id} due to missing or invalid consultant data.`);
+                    return; // Skip this slot if consultant data is bad
+                }
 
-                 // Ensure consultantData has an ID
-                 if (!consultantData || !consultantData.id) {
-                     console.warn(`Skipping slot ${slot.id} because consultant data lacks an ID.`);
-                     return;
-                 }
+                const slotData: SlotData = {
+                    id: slot.id,
+                    start_time: slot.start_time,
+                    end_time: slot.end_time,
+                };
 
-                 const slotData = {
-                     id: slot.id,
-                     start_time: slot.start_time,
-                     end_time: slot.end_time,
-                 };
+                if (consultantsMap.has(consultantData.id)) {
+                    // Add slot to existing consultant entry
+                    consultantsMap.get(consultantData.id)?.availability_slots.push(slotData);
+                } else {
+                    // Create new consultant entry
+                    consultantsMap.set(consultantData.id, {
+                        ...consultantData, // Spread consultant details (id, name, specialty, bio)
+                        availability_slots: [slotData], // Start array with current slot
+                    });
+                }
+            });
 
-                 if (consultantsMap.has(consultantData.id)) {
-                     // Add slot to existing consultant entry
-                     consultantsMap.get(consultantData.id)?.availability_slots.push(slotData);
-                 } else {
-                     // Create new consultant entry
-                     consultantsMap.set(consultantData.id, {
-                         ...consultantData, // Spread consultant details (id, name, specialty, bio)
-                         availability_slots: [slotData], // Start array with current slot
-                     });
-                 }
-             });
-
-             // Convert Map values to array
+            // Convert Map values to array
             setConsultants(Array.from(consultantsMap.values()));
-
-        } catch (err: any) {
-            console.error("Error fetching available consultants:", err);
-            setError(err.message || "Failed to load consultants.");
-            toast.error("Failed to load consultant availability.");
+        } catch (error: any) {
+            console.error('Error fetching consultants:', error);
+            toast.error(error.message || 'Failed to load consultants');
         } finally {
             setLoading(false);
         }
