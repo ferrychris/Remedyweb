@@ -34,7 +34,7 @@ import { RemediesManagement } from './components/admincomponents/RemediesManagem
 import { AilmentsManagement } from './components/admincomponents/AilmentsManagement';
 import { StoreManagement } from './components/admincomponents/StoreManagement';
 import { UsersManagement } from './components/admincomponents/UsersManagement';
-import { ConsultantsManagement } from './components/admincomponents/ConsultantsManagement';
+import { ConsultantsManagement } from './components/admincomponents/ConsultantsManagement.tsx';
 import { AdminSettings } from './components/admincomponents/AdminSettings';
 import { HealthTracking } from './components/userdashboard/HealthTracking.tsx';
 import { Orders } from './components/userdashboard/Orders.tsx';

@@ -6,8 +6,9 @@ import { AuthModal } from './AuthModal';
 import { SearchBar } from './SearchBar';
 
 function Navbar() {
-  const { user, isAdmin, signOut } = useAuth();
+  const { user, profile, isAdmin, signOut } = useAuth();
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [isSignUpMode, setIsSignUpMode] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const accountMenuRef = useRef<HTMLDivElement>(null);
   const accountButtonRef = useRef<HTMLButtonElement>(null);
@@ -31,6 +32,11 @@ function Navbar() {
 
   const isActive = (path: string) => {
     return location.pathname === path;
+  };
+
+  const openAuthModal = (signUp: boolean) => {
+    setIsSignUpMode(signUp);
+    setShowAuthModal(true);
   };
 
   return (
@@ -75,7 +81,7 @@ function Navbar() {
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <Search className="h-5 w-5 text-gray-400" />
                   </div>
-                  <SearchBar className="w-full pl-10 pr-4 py-2 rounded-full bg-gray-50 border border-gray-200 focus:border-emerald-300 focus:ring focus:ring-emerald-200 focus:ring-opacity-50" />
+                  <SearchBar />
                 </div>
               </div>
               
@@ -94,25 +100,45 @@ function Navbar() {
                   {accountMenuOpen && (
                     <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl border border-gray-100 shadow-lg py-2 z-50">
                       <div className="px-4 py-2 border-b border-gray-100">
-                        <p className="text-sm font-medium text-gray-900">{user.name}</p>
+                        <p className="text-sm font-medium text-gray-900">{profile?.display_name || 'User'}</p>
                         <p className="text-xs text-gray-500">{user.email}</p>
                       </div>
                       {isAdmin && (
                         <Link
                           to="/admin"
                           className="block px-4 py-2 text-sm text-gray-700 hover:bg-emerald-50 hover:text-emerald-600"
+                          onClick={() => setAccountMenuOpen(false)}
                         >
                           Admin Dashboard
                         </Link>
                       )}
                       <Link
+                        to="/ndashboard"
+                        className="block px-4 py-2 text-sm text-gray-700 hover:bg-emerald-50 hover:text-emerald-600"
+                        onClick={() => setAccountMenuOpen(false)}
+                      >
+                        My Dashboard
+                      </Link>
+                      {/* Consultant Dashboard link */}
+                      <Link
+                        to="/consultant-dashboard"
+                        className="block px-4 py-2 text-sm text-gray-700 hover:bg-emerald-50 hover:text-emerald-600"
+                        onClick={() => setAccountMenuOpen(false)}
+                      >
+                        Consultant Dashboard
+                      </Link>
+                      <Link
                         to="/settings"
                         className="block px-4 py-2 text-sm text-gray-700 hover:bg-emerald-50 hover:text-emerald-600"
+                        onClick={() => setAccountMenuOpen(false)}
                       >
                         Settings
                       </Link>
                       <button
-                        onClick={signOut}
+                        onClick={() => {
+                          signOut();
+                          setAccountMenuOpen(false);
+                        }}
                         className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50"
                       >
                         Sign Out
@@ -121,12 +147,20 @@ function Navbar() {
                   )}
                 </div>
               ) : (
-                <button
-                  onClick={() => setShowAuthModal(true)}
-                  className="px-6 py-2.5 bg-emerald-600 text-white rounded-full font-semibold hover:bg-emerald-700 transition-colors shadow-md hover:shadow-lg"
-                >
-                  Sign In
-                </button>
+                <div className="flex space-x-3">
+                  <button
+                    onClick={() => openAuthModal(false)}
+                    className="px-5 py-2 bg-white text-emerald-600 border border-emerald-200 rounded-full font-medium hover:bg-emerald-50 transition-colors"
+                  >
+                    Sign In
+                  </button>
+                  <button
+                    onClick={() => openAuthModal(true)}
+                    className="px-5 py-2 bg-emerald-600 text-white rounded-full font-medium hover:bg-emerald-700 transition-colors shadow-md hover:shadow-lg"
+                  >
+                    Sign Up
+                  </button>
+                </div>
               )}
             </div>
           </div>
@@ -136,7 +170,13 @@ function Navbar() {
       {/* Spacer for fixed navbar */}
       <div className="h-20" />
       
-      {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
+      {showAuthModal && (
+        <AuthModal 
+          isOpen={showAuthModal} 
+          onClose={() => setShowAuthModal(false)}
+          defaultIsSignUp={isSignUpMode}
+        />
+      )}
     </>
   );
 }

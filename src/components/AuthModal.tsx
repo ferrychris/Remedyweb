@@ -8,12 +8,13 @@ import { AuthError, Session } from '@supabase/supabase-js';
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
+  defaultIsSignUp?: boolean;
 }
 
-export function AuthModal({ isOpen, onClose }: AuthModalProps) {
+export function AuthModal({ isOpen, onClose, defaultIsSignUp = false }: AuthModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isSignUp, setIsSignUp] = useState(false);
+  const [isSignUp, setIsSignUp] = useState(defaultIsSignUp);
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -45,9 +46,14 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
       setError(null);
       setLoading(false);
       setTouchedFields({ email: false, password: false, confirmPassword: false });
-      setIsSignUp(false);
+      // Don't reset isSignUp here to preserve the state for reopening
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    // Update isSignUp when defaultIsSignUp prop changes
+    setIsSignUp(defaultIsSignUp);
+  }, [defaultIsSignUp]);
 
   if (!isOpen) return null;
 
