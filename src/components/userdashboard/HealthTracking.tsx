@@ -71,7 +71,12 @@ export function HealthTracking() {
 
       setNewEntry({ rating: '', feedback: '' });
       toast.success('Health tracking entry logged successfully!');
-      fetchHealthEntries(); // Refresh the list
+      const { data: entries } = await supabase
+        .from('health_tracking')
+        .select('*')
+        .eq('patient_id', user?.id || '')
+        .order('created_at', { ascending: false });
+      setHealthEntries(entries as HealthTrackingEntry[] || []);
     } catch (error) {
       toast.error('Failed to log health tracking entry');
       console.error('Log health tracking error:', error);
