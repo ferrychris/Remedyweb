@@ -24,6 +24,7 @@ import SavedRemedies from './components/userdashboard/SavedRemedies';
 // Store Components
 import { Store } from './components/storecomponents/Store';
 import ProductDetail from './components/storecomponents/ProductDetail';
+import Checkout from './components/storecomponents/Checkout';
 
 // Admin Components
 import { AdminDashboard } from './components/admincomponents/AdminDashboard';
@@ -78,6 +79,7 @@ function App() {
           {/* Store Routes */}
           <Route path="/store" element={<Store />} />
           <Route path="/store/:slug" element={<ProductDetail />} />
+          <Route path="/store/checkout" element={<Checkout />} />
           
           {/* Admin Routes */}
           <Route path="/adminlogin" element={<AdminLogin />} />
