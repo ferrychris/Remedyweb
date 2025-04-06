@@ -3,12 +3,48 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/auth';
 import toast from 'react-hot-toast';
-import { Consultation, Consultant } from '../../../types';
+import { Clock, Calendar, CreditCard, User, Wallet, CheckCircle } from 'lucide-react';
+import BookingModal from './consultation/BookingModal';
+
+interface Consultation {
+  id: string;
+  user_id: string;
+  consultant_id: string;
+  scheduled_for: string;
+  status: string;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+  consultant?: {
+    name: string;
+    specialty: string;
+  };
+}
+
+interface Consultant {
+  id: string;
+  name: string;
+  specialty: string;
+  bio?: string;
+  hourly_rate?: number;
+  rating?: number;
+  status: string;
+  availability_slots?: AvailabilitySlot[];
+}
+
+interface AvailabilitySlot {
+  id: string;
+  consultant_id: string;
+  start_time: string;
+  end_time: string;
+  is_booked: boolean;
+}
 
 export function Consultations() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [consultations, setConsultations] = useState<Consultation[]>([]);
   const [consultants, setConsultants] = useState<Consultant[]>([]);
+  const [availableConsultants, setAvailableConsultants] = useState<Consultant[]>([]);
   const [newConsultation, setNewConsultation] = useState({
     consultant_id: '',
     scheduled_for: '',
@@ -16,6 +52,23 @@ export function Consultations() {
   });
   const [editingConsultation, setEditingConsultation] = useState<Consultation | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingConsultants, setLoadingConsultants] = useState(true);
+  
+  // Modal state
+  const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
+  const [selectedConsultant, setSelectedConsultant] = useState<string | null>(null);
+  const [selectedConsultantName, setSelectedConsultantName] = useState<string>('');
+  
+  // Payment state
+  const [showPaymentForm, setShowPaymentForm] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState(0);
+  const [paymentMethod, setPaymentMethod] = useState<'card' | 'wallet'>('card');
+  const [cardDetails, setCardDetails] = useState({
+    cardNumber: '',
+    expiryDate: '',
+    cvv: '',
+    name: ''
+  });
 
   useEffect(() => {
     const fetchData = async () => {
@@ -34,10 +87,10 @@ export function Consultations() {
         if (consultationsError) throw consultationsError;
         setConsultations(consultationsData || []);
 
-        // Fetch available consultants
+        // Fetch all available consultants
         const { data: consultantsData, error: consultantsError } = await supabase
           .from('consultants')
-          .select('id, name, specialty')
+          .select('id, name, specialty, bio, hourly_rate, rating, status')
           .eq('status', 'active');
 
         if (consultantsError) throw consultantsError;
@@ -50,8 +103,53 @@ export function Consultations() {
       }
     };
 
+    fetchConsultantsWithAvailability();
     fetchData();
   }, [user]);
+
+  const fetchConsultantsWithAvailability = async () => {
+    if (!user) return;
+    
+    setLoadingConsultants(true);
+    try {
+      // Fetch consultants with their availability slots
+      const { data, error } = await supabase
+        .from('consultants')
+        .select(`
+          id, 
+          name, 
+          specialty, 
+          bio, 
+          hourly_rate, 
+          rating,
+          status,
+          availability_slots(
+            id, 
+            start_time, 
+            end_time, 
+            is_booked
+          )
+        `)
+        .eq('status', 'active');
+      
+      if (error) throw error;
+      
+      // Filter consultants to only include those with available slots
+      const consultantsWithAvailability = data?.map(consultant => ({
+        ...consultant,
+        availability_slots: consultant.availability_slots.filter(
+          slot => !slot.is_booked && new Date(slot.start_time) > new Date()
+        )
+      })).filter(consultant => consultant.availability_slots.length > 0);
+      
+      setAvailableConsultants(consultantsWithAvailability || []);
+    } catch (error) {
+      console.error('Error fetching consultants with availability:', error);
+      toast.error('Failed to load available consultants');
+    } finally {
+      setLoadingConsultants(false);
+    }
+  };
 
   const handleScheduleConsultation = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -126,10 +224,74 @@ export function Consultations() {
     }
   };
 
-  if (loading) {
+  const openBookingModal = (consultantId: string, consultantName: string) => {
+    setSelectedConsultant(consultantId);
+    setSelectedConsultantName(consultantName);
+    setIsBookingModalOpen(true);
+  };
+
+  const closeBookingModal = () => {
+    setIsBookingModalOpen(false);
+    setSelectedConsultant(null);
+  };
+
+  const handleBookingSuccess = (slot: AvailabilitySlot, consultantId: string) => {
+    // Find consultant price
+    const consultant = availableConsultants.find(c => c.id === consultantId);
+    if (consultant && consultant.hourly_rate) {
+      // Calculate price based on slot duration
+      const startTime = new Date(slot.start_time);
+      const endTime = new Date(slot.end_time);
+      const durationHours = (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60);
+      const totalPrice = consultant.hourly_rate * durationHours;
+      
+      setPaymentAmount(totalPrice);
+      setShowPaymentForm(true);
+    } else {
+      toast.error('Could not determine consultation price');
+    }
+  };
+
+  const handlePayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // In a real application, you would integrate with a payment processor like Stripe
+    // For demo purposes, we'll simulate a successful payment
+    
+    try {
+      // Simulating payment processing delay
+      setLoading(true);
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      // After successful payment, update the booking status
+      toast.success('Payment successful! Your consultation is confirmed.');
+      setShowPaymentForm(false);
+      
+      // Refresh consultations list
+      fetchData();
+      fetchConsultantsWithAvailability();
+    } catch (error) {
+      toast.error('Payment failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatDateTime = (dateString: string) => {
+    const options: Intl.DateTimeFormatOptions = {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit'
+    };
+    return new Date(dateString).toLocaleString(undefined, options);
+  };
+
+  if (loading && loadingConsultants) {
     return (
-      <div className="flex justify-center items-center h-full">
-        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-green-500"></div>
+      <div className="flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-emerald-500"></div>
       </div>
     );
   }
@@ -138,78 +300,106 @@ export function Consultations() {
     <div className="p-6">
       <h1 className="text-2xl font-bold text-gray-800 mb-6">Consultations</h1>
 
-      {/* Schedule New Consultation */}
-      <div className="bg-white p-4 rounded-lg shadow mb-6 transform transition duration-300 hover:scale-105">
-        <h2 className="text-lg font-semibold text-gray-700 mb-4">Schedule a New Consultation</h2>
-        <form onSubmit={handleScheduleConsultation} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Consultant</label>
-            <select
-              value={newConsultation.consultant_id}
-              onChange={(e) => setNewConsultation({ ...newConsultation, consultant_id: e.target.value })}
-              className="border p-2 w-full rounded focus:outline-none focus:ring-2 focus:ring-green-500"
-              required
-            >
-              <option value="">Select a consultant</option>
-              {consultants.map((consultant) => (
-                <option key={consultant.id} value={consultant.id}>
-                  {consultant.name} ({consultant.specialty})
-                </option>
-              ))}
-            </select>
+      {/* Available Consultants */}
+      <div className="bg-white p-6 rounded-xl shadow-sm mb-8">
+        <h2 className="text-xl font-bold text-gray-800 mb-4">Available Consultants</h2>
+        
+        {loadingConsultants ? (
+          <div className="flex justify-center items-center h-24">
+            <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-emerald-500"></div>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Date & Time</label>
-            <input
-              type="datetime-local"
-              value={newConsultation.scheduled_for}
-              onChange={(e) => setNewConsultation({ ...newConsultation, scheduled_for: e.target.value })}
-              className="border p-2 w-full rounded focus:outline-none focus:ring-2 focus:ring-green-500"
-              required
-            />
+        ) : availableConsultants.length === 0 ? (
+          <p className="text-gray-600">No consultants with availability found at this time.</p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {availableConsultants.map(consultant => (
+              <div key={consultant.id} className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-md hover:shadow-lg transition-shadow duration-300">
+                <div className="p-6">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center">
+                      <div className="h-12 w-12 bg-gradient-to-br from-emerald-400 to-emerald-600 rounded-full flex items-center justify-center text-white">
+                        <User className="h-6 w-6" />
+                      </div>
+                      <div className="ml-4">
+                        <h3 className="text-lg font-semibold text-gray-800">Dr. {consultant.name}</h3>
+                        <p className="text-sm text-gray-600">{consultant.specialty}</p>
+                      </div>
+                    </div>
+                    {consultant.rating && (
+                      <div className="bg-emerald-50 px-2 py-1 rounded text-emerald-700 text-sm font-medium">
+                        ★ {consultant.rating}
+                      </div>
+                    )}
+                  </div>
+                  
+                  {consultant.bio && (
+                    <p className="mt-3 text-gray-600 text-sm">{consultant.bio}</p>
+                  )}
+                  
+                  <div className="mt-4">
+                    <div className="flex justify-between items-center mb-2">
+                      <h4 className="text-sm font-medium text-gray-700">Availability</h4>
+                      <span className="text-xs text-emerald-600">{consultant.availability_slots?.length || 0} slots</span>
+                    </div>
+                    
+                    <div className="space-y-2 max-h-32 overflow-y-auto">
+                      {consultant.availability_slots?.slice(0, 3).map(slot => (
+                        <div key={slot.id} className="flex items-center justify-between bg-gray-50 px-3 py-2 rounded-lg">
+                          <div className="flex items-center text-sm text-gray-600">
+                            <Calendar className="h-4 w-4 mr-1" />
+                            <span>{formatDateTime(slot.start_time)}</span>
+                          </div>
+                        </div>
+                      ))}
+                      {(consultant.availability_slots?.length || 0) > 3 && (
+                        <div className="text-center text-xs text-emerald-600">
+                          +{(consultant.availability_slots?.length || 0) - 3} more slots
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="mt-5 flex justify-between items-center">
+                    <div className="text-emerald-600 font-semibold">
+                      ${consultant.hourly_rate}/hour
+                    </div>
+                    <button
+                      onClick={() => openBookingModal(consultant.id, consultant.name)}
+                      className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors"
+                    >
+                      Book Now
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Notes</label>
-            <textarea
-              value={newConsultation.notes}
-              onChange={(e) => setNewConsultation({ ...newConsultation, notes: e.target.value })}
-              className="border p-2 w-full rounded focus:outline-none focus:ring-2 focus:ring-green-500"
-              rows={3}
-              placeholder="Add any notes for the consultation..."
-            />
-          </div>
-          <button
-            type="submit"
-            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition duration-200"
-          >
-            Schedule
-          </button>
-        </form>
+        )}
       </div>
 
-      {/* Consultation List */}
-      <div className="bg-white p-4 rounded-lg shadow transform transition duration-300 hover:scale-105">
-        <h2 className="text-lg font-semibold text-gray-700 mb-4">Your Consultations</h2>
+      {/* Your Scheduled Consultations */}
+      <div className="bg-white p-6 rounded-xl shadow-sm mb-8">
+        <h2 className="text-xl font-bold text-gray-800 mb-4">Your Consultations</h2>
         {consultations.length === 0 ? (
-          <p className="text-gray-500">No consultations scheduled.</p>
+          <p className="text-gray-600">No consultations scheduled.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
-              <thead>
+              <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Consultant
                   </th>
-                  <th className="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Date & Time
                   </th>
-                  <th className="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Status
                   </th>
-                  <th className="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Notes
                   </th>
-                  <th className="px-6 py-3 bg-gray-50 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Actions
                   </th>
                 </tr>
@@ -243,7 +433,7 @@ export function Consultations() {
                           onChange={(e) =>
                             setEditingConsultation({ ...editingConsultation, notes: e.target.value })
                           }
-                          className="border p-2 w-full rounded focus:outline-none focus:ring-2 focus:ring-green-500"
+                          className="border p-2 w-full rounded focus:outline-none focus:ring-2 focus:ring-emerald-500"
                           rows={2}
                         />
                       ) : (
@@ -252,29 +442,29 @@ export function Consultations() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       {editingConsultation?.id === consultation.id ? (
-                        <>
+                        <div className="flex justify-end space-x-2">
                           <button
                             onClick={() => handleUpdateNotes(consultation.id, editingConsultation.notes || '')}
-                            className="text-green-600 hover:text-green-800 mr-4"
+                            className="text-emerald-600 hover:text-emerald-900"
                           >
                             Save
                           </button>
                           <button
                             onClick={() => setEditingConsultation(null)}
-                            className="text-gray-600 hover:text-gray-800"
+                            className="text-gray-600 hover:text-gray-900"
                           >
                             Cancel
                           </button>
-                        </>
+                        </div>
                       ) : (
-                        <>
+                        <div className="flex justify-end space-x-2">
                           <button
                             onClick={() => setEditingConsultation(consultation)}
-                            className="text-indigo-600 hover:text-indigo-900 mr-4"
+                            className="text-emerald-600 hover:text-emerald-900"
                           >
                             Edit Notes
                           </button>
-                          {consultation.status === 'pending' && (
+                          {consultation.status !== 'cancelled' && consultation.status !== 'completed' && (
                             <button
                               onClick={() => handleCancelConsultation(consultation.id)}
                               className="text-red-600 hover:text-red-900"
@@ -282,7 +472,7 @@ export function Consultations() {
                               Cancel
                             </button>
                           )}
-                        </>
+                        </div>
                       )}
                     </td>
                   </tr>
@@ -292,6 +482,167 @@ export function Consultations() {
           </div>
         )}
       </div>
+
+      {/* Booking Modal */}
+      {isBookingModalOpen && selectedConsultant && (
+        <BookingModal
+          isOpen={isBookingModalOpen}
+          onClose={closeBookingModal}
+          consultantId={selectedConsultant}
+          consultantName={selectedConsultantName}
+          onBookingSuccess={handleBookingSuccess}
+        />
+      )}
+
+      {/* Payment Modal */}
+      {showPaymentForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-lg max-w-md w-full p-6">
+            <h2 className="text-xl font-bold text-gray-800 mb-4">Payment for Consultation</h2>
+            <div className="mb-4">
+              <p className="text-gray-700">Total Amount: <span className="font-bold text-emerald-600">${paymentAmount.toFixed(2)}</span></p>
+            </div>
+            
+            <div className="mb-4">
+              <div className="flex space-x-4 mb-4">
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod('card')}
+                  className={`flex-1 py-2 px-3 rounded-lg flex items-center justify-center border ${
+                    paymentMethod === 'card' 
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-700' 
+                      : 'border-gray-300 text-gray-700'
+                  }`}
+                >
+                  <CreditCard className="h-5 w-5 mr-2" />
+                  Credit Card
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod('wallet')}
+                  className={`flex-1 py-2 px-3 rounded-lg flex items-center justify-center border ${
+                    paymentMethod === 'wallet' 
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-700' 
+                      : 'border-gray-300 text-gray-700'
+                  }`}
+                >
+                  <Wallet className="h-5 w-5 mr-2" />
+                  Wallet
+                </button>
+              </div>
+              
+              {paymentMethod === 'card' ? (
+                <form onSubmit={handlePayment} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Card Number</label>
+                    <input
+                      type="text"
+                      placeholder="1234 5678 9012 3456"
+                      value={cardDetails.cardNumber}
+                      onChange={(e) => setCardDetails({...cardDetails, cardNumber: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      required
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Expiry Date</label>
+                      <input
+                        type="text"
+                        placeholder="MM/YY"
+                        value={cardDetails.expiryDate}
+                        onChange={(e) => setCardDetails({...cardDetails, expiryDate: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">CVV</label>
+                      <input
+                        type="text"
+                        placeholder="123"
+                        value={cardDetails.cvv}
+                        onChange={(e) => setCardDetails({...cardDetails, cvv: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Name on Card</label>
+                    <input
+                      type="text"
+                      placeholder="John Doe"
+                      value={cardDetails.name}
+                      onChange={(e) => setCardDetails({...cardDetails, name: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      required
+                    />
+                  </div>
+                  <div className="flex justify-end space-x-3 mt-6">
+                    <button
+                      type="button"
+                      onClick={() => setShowPaymentForm(false)}
+                      className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 flex items-center"
+                      disabled={loading}
+                    >
+                      {loading ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
+                          Processing...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle className="h-4 w-4 mr-2" />
+                          Pay ${paymentAmount.toFixed(2)}
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <div className="space-y-4">
+                  <div className="bg-emerald-50 p-4 rounded-lg">
+                    <p className="text-sm text-gray-700">Your wallet balance: <span className="font-bold text-emerald-600">$500.00</span></p>
+                  </div>
+                  <div className="flex justify-end space-x-3 mt-6">
+                    <button
+                      type="button"
+                      onClick={() => setShowPaymentForm(false)}
+                      className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handlePayment}
+                      className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 flex items-center"
+                      disabled={loading}
+                    >
+                      {loading ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
+                          Processing...
+                        </>
+                      ) : (
+                        <>
+                          <Wallet className="h-4 w-4 mr-2" />
+                          Pay from Wallet
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
