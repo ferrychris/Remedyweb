@@ -40,8 +40,6 @@ import { HealthTracking } from './components/userdashboard/HealthTracking.tsx';
 import { Orders } from './components/userdashboard/Orders.tsx';
 import { Consultations } from './components/userdashboard/Consultations.tsx';
 import ConsultantDashboard from './components/consultantsdash/ConsultantDashboard.tsx';
-import AppointmentManager from './components/consultantsdash/AppointmentManager.tsx';
-import BookAppointment from './components/consultantsdash/BookAppointment.tsx';
 
 
 function App() {
@@ -70,11 +68,6 @@ function App() {
           
           {/* Old User Dashboard Route (keep or remove as needed) */}
           <Route path="/dashboard" element={<Dashboard />} />
-
-
-          {/* Appointment route */}
-          <Route path="/appointment" element={<AppointmentManager />} />
-          <Route path="/book-appointment/:03978ad1-21aa-45f8-b4aa-182e7363d219" element={<BookAppointment />} />
           
           {/* Other User Routes */}
           <Route path="/consult" element={<ConsultDoctor />} />
