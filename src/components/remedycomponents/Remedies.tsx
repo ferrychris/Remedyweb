@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ThumbsUp, MessageSquare, Search, Plus } from 'lucide-react';
+import { ThumbsUp, MessageSquare, Search, Plus, Loader2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/auth';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -20,6 +20,7 @@ interface Remedy {
   comments_count: number;
   description?: string;
   image?: string;
+  is_liked?: boolean;
   user_profile?: {
     id: string;
     display_name: string;
@@ -36,6 +37,7 @@ function Remedies() {
   const [selectedAilment, setSelectedAilment] = useState('all');
   const [remedies, setRemedies] = useState<Remedy[]>([]);
   const [loading, setLoading] = useState(true);
+  const [likingIds, setLikingIds] = useState<number[]>([]);
 
   useEffect(() => {
     fetchRemedies();
@@ -47,17 +49,34 @@ function Remedies() {
       navigate('/login');
       return;
     }
+    
+    // Prevent double-clicking
+    if (likingIds.includes(remedyId)) return;
+    
+    // Get the current remedy
+    const remedyToUpdate = remedies.find(r => r.id === remedyId);
+    if (!remedyToUpdate) return;
+    
+    // Add to loading state
+    setLikingIds(prev => [...prev, remedyId]);
+    
+    // Optimistically update UI
+    const isCurrentlyLiked = remedyToUpdate.is_liked || false;
+    const updatedRemedies = remedies.map(r => 
+      r.id === remedyId 
+        ? { 
+            ...r, 
+            is_liked: !isCurrentlyLiked,
+            likes_count: isCurrentlyLiked 
+              ? Math.max(0, (r.likes_count || 0) - 1) 
+              : (r.likes_count || 0) + 1
+          } 
+        : r
+    );
+    setRemedies(updatedRemedies);
   
     try {
-      // Check if the user has already liked this remedy
-      const { data: existingLike, error: likeCheckError } = await supabase
-        .from("remedy_likes")
-        .select("*")
-        .eq("user_id", user.id)
-        .eq("remedy_id", remedyId)
-        .single();
-  
-      if (existingLike) {
+      if (isCurrentlyLiked) {
         // Unlike the remedy
         const { error: unlikeError } = await supabase
           .from("remedy_likes")
@@ -66,18 +85,6 @@ function Remedies() {
           .eq("remedy_id", remedyId);
   
         if (unlikeError) throw unlikeError;
-  
-        // Decrement likes count using RPC
-        const { error: decrementError } = await supabase.rpc('decrement_remedy_likes', {
-          p_remedy_id: remedyId
-        });
-        if (decrementError) {
-            console.error('Decrement RPC error:', decrementError);
-            // Decide if we should throw or just show toast
-            throw new Error(`Failed to update like count: ${decrementError.message}`); 
-        }
-  
-        toast.success("Removed like");
       } else {
         // Like the remedy
         const { error: likeError } = await supabase
@@ -88,31 +95,26 @@ function Remedies() {
           });
     
         if (likeError) throw likeError;
-    
-         // Increment likes count using RPC
-         const { error: incrementError } = await supabase.rpc('increment_remedy_likes', {
-           p_remedy_id: remedyId
-         });
-         if (incrementError) {
-             console.error('Increment RPC error:', incrementError);
-             // Decide if we should throw or just show toast
-            throw new Error(`Failed to update like count: ${incrementError.message}`); 
-         }
-
-        toast.success("Added like!");
       }
-      
-      fetchRemedies(); // Refresh the list to show updated counts
     } catch (error) {
       console.error("Error handling like:", error);
       toast.error("Failed to update like");
+      // Revert optimistic update
+      setRemedies(prevRemedies => prevRemedies.map(r => 
+        r.id === remedyId ? { ...remedyToUpdate } : r
+      ));
+    } finally {
+      // Remove from loading state
+      setLikingIds(prev => prev.filter(id => id !== remedyId));
     }
   };
 
   const fetchRemedies = async () => {
     try {
       setLoading(true);
-      let query = supabase
+      
+      // Get basic remedy data
+      const { data: remediesData, error: remediesError } = await supabase
         .from('remedies')
         .select(`
           *,
@@ -126,10 +128,29 @@ function Remedies() {
         `)
         .order('created_at', { ascending: false });
 
-      const { data, error } = await query;
-
-      if (error) throw error;
-      setRemedies(data || []);
+      if (remediesError) throw remediesError;
+      
+      let enrichedRemedies = remediesData || [];
+      
+      // If user is logged in, check which remedies are liked by the user
+      if (user) {
+        const { data: likedRemedies, error: likesError } = await supabase
+          .from('remedy_likes')
+          .select('remedy_id')
+          .eq('user_id', user.id);
+          
+        if (likesError) {
+          console.error('Error fetching liked remedies:', likesError);
+        } else {
+          const likedIds = new Set(likedRemedies?.map(like => like.remedy_id) || []);
+          enrichedRemedies = enrichedRemedies.map(remedy => ({
+            ...remedy,
+            is_liked: likedIds.has(remedy.id)
+          }));
+        }
+      }
+      
+      setRemedies(enrichedRemedies);
     } catch (error) {
       console.error('Error fetching remedies:', error);
       toast.error('Failed to load remedies');
@@ -259,13 +280,28 @@ function Remedies() {
                     </p>
                   )}
                   <div className="flex items-center gap-4 mt-4 pt-4 border-t border-gray-100">
-                    <button
+                    <motion.button
+                      whileTap={{ scale: 0.9 }}
                       onClick={() => handleLike(remedy.id)}
-                      className="flex items-center gap-1.5 px-3 py-1 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors"
+                      disabled={likingIds.includes(remedy.id)}
+                      aria-label={remedy.is_liked ? "Unlike this remedy" : "Like this remedy"}
+                      className={`flex items-center gap-1.5 px-3 py-1 rounded-lg transition-all duration-200 ${
+                        remedy.is_liked ? 'bg-emerald-100 text-emerald-700' : 'bg-emerald-50 hover:bg-emerald-100'
+                      } ${likingIds.includes(remedy.id) ? 'opacity-70 cursor-wait' : ''}`}
                     >
-                      <ThumbsUp className="h-4 w-4 text-emerald-600" />
-                      <span className="text-sm text-emerald-700">{remedy.likes_count || 0} likes</span>
-                    </button>
+                      {likingIds.includes(remedy.id) ? (
+                        <Loader2 className="h-4 w-4 animate-spin text-emerald-600" />
+                      ) : (
+                        <ThumbsUp 
+                          className={`h-4 w-4 transition-all duration-200 ${
+                            remedy.is_liked ? 'fill-emerald-600 text-emerald-600' : 'text-emerald-600'
+                          }`} 
+                        />
+                      )}
+                      <span className="text-sm text-emerald-700">
+                        {remedy.likes_count || 0} {remedy.likes_count === 1 ? 'like' : 'likes'}
+                      </span>
+                    </motion.button>
                     <Link to={`/remedies/${remedy.slug}`} className="flex items-center gap-1.5 px-3 py-1 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors">
                       <MessageSquare className="h-4 w-4 text-emerald-600" />
                       <span className="text-sm text-emerald-700">{remedy.comments_count || 0} comments</span>

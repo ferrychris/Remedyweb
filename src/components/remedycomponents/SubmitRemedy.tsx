@@ -70,25 +70,7 @@ export default function SubmitRemedy() {
 
       if (remedyError) throw remedyError;
 
-      // Initialize likes and comments counts
-      await supabase
-        .from('remedy_likes')
-        .insert({
-          remedy_id: remedy.id,
-          count: 0
-        })
-        .select()
-        .single();
-
-      await supabase
-        .from('comments')
-        .insert({
-          remedy_id: remedy.id,
-          count: 0
-        })
-        .select()
-        .single();
-
+      // No need to initialize likes and comments as we have default values
       toast.success('Remedy submitted successfully!');
       navigate(`/remedies/${slug}`);
     } catch (error: any) {

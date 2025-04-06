@@ -133,7 +133,7 @@ function RemedyDetail() {
       navigate('/login');
       return;
     }
-    if (!remedy) return;
+    if (!remedy || isLiking) return;
 
     setIsLiking(true);
     const originalState = { is_liked: remedy.is_liked, likes_count: remedy.likes_count };
@@ -154,13 +154,6 @@ function RemedyDetail() {
           .from("remedy_likes")
           .insert({ user_id: user.id, remedy_id: remedy.id });
         if (likeError) throw likeError;
-
-        const { error: incrementError } = await supabase.rpc('increment_remedy_likes', {
-          p_remedy_id: remedy.id
-        });
-        if (incrementError) throw incrementError;
-
-        toast.success("Added like!");
       } else {
         const { error: unlikeError } = await supabase
           .from("remedy_likes")
@@ -168,14 +161,10 @@ function RemedyDetail() {
           .eq("user_id", user.id)
           .eq("remedy_id", remedy.id);
         if (unlikeError) throw unlikeError;
-
-        const { error: decrementError } = await supabase.rpc('decrement_remedy_likes', {
-          p_remedy_id: remedy.id
-        });
-        if (decrementError) throw decrementError;
-
-        toast.success("Removed like");
       }
+      
+      toast.success(newIsLiked ? "Remedy liked!" : "Remedy unliked");
+      
     } catch (error: any) {
       if (error?.code === '23505') {
         console.warn("Attempted to insert duplicate like:", error);
@@ -405,18 +394,24 @@ function RemedyDetail() {
         </div>
         
         <div className="flex items-center gap-6 text-gray-600 mb-6">
-          <button
+          <motion.button
+            whileTap={{ scale: 0.95 }}
             onClick={handleLike}
             disabled={isLiking || !user}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+            aria-label={remedy.is_liked ? "Unlike this remedy" : "Like this remedy"}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-200 ${
               remedy.is_liked
                 ? 'bg-emerald-100 text-emerald-700'
                 : 'hover:bg-gray-100'
-            } ${!user ? 'opacity-50 cursor-not-allowed' : ''}`}
+            } ${!user ? 'opacity-50 cursor-not-allowed' : ''} ${isLiking ? 'opacity-70 cursor-wait' : ''}`}
           >
-            <ThumbsUp className={`h-5 w-5 ${remedy.is_liked ? 'fill-current' : ''}`} />
-            <span>{remedy.likes_count || 0} likes</span>
-          </button>
+            {isLiking ? (
+              <Loader2 className="h-5 w-5 animate-spin text-emerald-600" />
+            ) : (
+              <ThumbsUp className={`h-5 w-5 transition-transform ${remedy.is_liked ? 'fill-current scale-110' : ''}`} />
+            )}
+            <span>{remedy.likes_count || 0} {remedy.likes_count === 1 ? 'like' : 'likes'}</span>
+          </motion.button>
           <div className="flex items-center gap-2 px-4 py-2 bg-emerald-50 rounded-lg">
             <MessageSquare className="h-5 w-5 text-emerald-600" />
             <span className="text-emerald-700">{remedy.comments_count || 0} comments</span>
