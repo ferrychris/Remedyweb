@@ -10,7 +10,13 @@ interface OrderItem {
   product_id: string;
   quantity: number;
   price_at_purchase: number;
-  product: { name: string };
+  product: { 
+    id: string;
+    name: string;
+    // Add other product properties that might be needed
+    price?: number;
+    image?: string | null;
+  };
 }
 
 interface Order {

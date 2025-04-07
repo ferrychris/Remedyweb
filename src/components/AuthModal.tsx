@@ -6,14 +6,14 @@ import { X } from 'lucide-react';
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
-  isSignUpMode: boolean;
+  defaultIsSignUp?: boolean;
 }
 
-export function AuthModal({ isOpen, onClose, isSignUpMode }: AuthModalProps): JSX.Element {
+export function AuthModal({ isOpen, onClose, defaultIsSignUp = false }: AuthModalProps): JSX.Element {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [mode, setMode] = useState<'signin' | 'signup'>(isSignUpMode ? 'signup' : 'signin');
+  const [mode, setMode] = useState<'signin' | 'signup'>(defaultIsSignUp ? 'signup' : 'signin');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
