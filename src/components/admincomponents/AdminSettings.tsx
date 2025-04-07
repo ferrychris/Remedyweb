@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
-import { useAuth } from '../../lib/auth';
 
 // Type definition for Profile
 interface Profile {

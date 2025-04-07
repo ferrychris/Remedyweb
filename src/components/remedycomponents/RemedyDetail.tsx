@@ -149,19 +149,21 @@ function RemedyDetail() {
         likes_count: newLikesCount
       });
 
-      if (newIsLiked) {
-        const { error: likeError } = await supabase
-          .from("remedy_likes")
-          .insert({ user_id: user.id, remedy_id: remedy.id });
-        if (likeError) throw likeError;
-      } else {
-        const { error: unlikeError } = await supabase
-          .from("remedy_likes")
-          .delete()
-          .eq("user_id", user.id)
-          .eq("remedy_id", remedy.id);
-        if (unlikeError) throw unlikeError;
-      }
+      const { error } = await supabase
+        .from('remedy_likes')
+        .upsert({
+          user_id: user.id,
+          remedy_id: remedy.id
+        }, {
+          onConflict: 'user_id, remedy_id'
+        });
+
+      if (error) throw error;
+      
+      await supabase
+        .from('remedies')
+        .update({ likes_count: newLikesCount })
+        .eq('id', remedy.id);
       
       toast.success(newIsLiked ? "Remedy liked!" : "Remedy unliked");
       

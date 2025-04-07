@@ -72,7 +72,7 @@ export function HealthTracking() {
       setNewEntry({ rating: '', feedback: '' });
       toast.success('Health tracking entry logged successfully!');
       const { data: entries } = await supabase
-        .from('health_tracking')
+        .from('consultation_ratings')
         .select('*')
         .eq('patient_id', user?.id || '')
         .order('created_at', { ascending: false });

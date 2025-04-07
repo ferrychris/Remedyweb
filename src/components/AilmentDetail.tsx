@@ -1,5 +1,5 @@
-import React from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Link, useParams } from 'react-router-dom';
 import { Activity, Star, MessageSquare } from 'lucide-react';
 
 function AilmentDetail() {

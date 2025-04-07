@@ -4,13 +4,13 @@ import { useAuth } from '../../../lib/auth';
 import toast from 'react-hot-toast';
 import { X, Calendar, Clock, CheckCircle } from 'lucide-react'; // Icons for close button and other elements
 
-// Interface for the props the modal receives
+// Updated interface for BookingModal props
 interface BookingModalProps {
     isOpen: boolean;
     onClose: () => void;
     consultantId: string;
-    consultantName: string;
-    onBookingSuccess: (slot: AvailabilitySlot, consultantId: string) => void;
+    consultantName?: string;
+    onBookingSuccess?: (slot: AvailabilitySlot, consultantId: string) => void;
 }
 
 // Interface for a single availability slot (specific to this modal)
@@ -26,7 +26,7 @@ export default function BookingModal({
     isOpen,
     onClose,
     consultantId,
-    consultantName,
+    consultantName = "",
     onBookingSuccess
 }: BookingModalProps) {
     const { user } = useAuth();
@@ -34,6 +34,35 @@ export default function BookingModal({
     const [loading, setLoading] = useState(true);
     const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
     const [groupedSlots, setGroupedSlots] = useState<Record<string, AvailabilitySlot[]>>({});
+    const [consultantData, setConsultantData] = useState<{name: string, specialty: string} | null>(null);
+
+    // Fetch consultant details if consultantName is not provided
+    useEffect(() => {
+        if (isOpen && consultantId && !consultantName) {
+            fetchConsultantDetails();
+        }
+    }, [isOpen, consultantId, consultantName]);
+
+    const fetchConsultantDetails = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('consultants')
+                .select('first_name, last_name, specialty')
+                .eq('id', consultantId)
+                .single();
+
+            if (error) throw error;
+            
+            if (data) {
+                setConsultantData({
+                    name: `${data.first_name} ${data.last_name}`,
+                    specialty: data.specialty
+                });
+            }
+        } catch (error) {
+            console.error('Error fetching consultant details:', error);
+        }
+    };
 
     useEffect(() => {
         if (isOpen && consultantId) {
@@ -82,7 +111,7 @@ export default function BookingModal({
         try {
             // Confirm booking
             const isConfirmed = window.confirm(
-                `Are you sure you want to book this appointment with Dr. ${consultantName}?`
+                `Are you sure you want to book this appointment with Dr. ${consultantName || consultantData?.name || 'the consultant'}?`
             );
             
             if (!isConfirmed) return;
@@ -94,10 +123,34 @@ export default function BookingModal({
                 return;
             }
             
-            // In a real implementation, we would mark the slot as booked in the database
-            // For now, we'll just simulate success
+            // Book the consultation
+            const { error } = await supabase
+                .from('consultations')
+                .insert({
+                    user_id: user.id,
+                    consultant_id: consultantId,
+                    scheduled_for: selectedSlotData.start_time,
+                    status: 'pending',
+                    notes: ''
+                });
+                
+            if (error) throw error;
             
-            onBookingSuccess(selectedSlotData, consultantId);
+            // Mark the slot as booked
+            const { error: slotError } = await supabase
+                .from('availability_slots')
+                .update({ is_booked: true })
+                .eq('id', selectedSlot);
+                
+            if (slotError) throw slotError;
+            
+            toast.success('Appointment booked successfully!');
+            
+            // Call the onBookingSuccess callback if provided
+            if (onBookingSuccess) {
+                onBookingSuccess(selectedSlotData, consultantId);
+            }
+            
             onClose();
         } catch (error) {
             console.error('Error booking slot:', error);
@@ -132,7 +185,7 @@ export default function BookingModal({
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
             <div className="bg-white rounded-xl shadow-lg max-w-md w-full max-h-[80vh] overflow-auto">
                 <div className="sticky top-0 bg-white z-10 p-4 border-b flex justify-between items-center">
-                    <h2 className="text-xl font-bold text-gray-800">Book Appointment with Dr. {consultantName}</h2>
+                    <h2 className="text-xl font-bold text-gray-800">Book Appointment with Dr. {consultantName || consultantData?.name || 'the consultant'}</h2>
                     <button 
                         onClick={onClose}
                         className="text-gray-400 hover:text-gray-600"

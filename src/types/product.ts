@@ -4,14 +4,14 @@ export interface Product {
   id: string;
   name: string;
   price: number;
-  description?: string;
-  category?: string;
-  image?: string;
-  slug?: string;
-  stock_quantity?: number;
-  status?: 'active' | 'inactive';
-  created_at?: string;
-  updated_at?: string;
+  description: string | null;
+  category: string | null;
+  image: string | null;
+  slug: string | null;
+  stock_quantity: number;
+  status: string;
+  created_at: string;
+  updated_at: string | null;
 }
 
 export interface CartItem {

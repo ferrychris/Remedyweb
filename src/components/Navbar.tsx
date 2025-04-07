@@ -4,17 +4,9 @@ import {
   Leaf,
   ShoppingBag,
   Home,
-  Settings,
-  Stethoscope,
   Activity,
   UserCircle,
   Search,
-  Menu,
-  X,
-  ShoppingCart,
-  Bell,
-  ChevronDown,
-  LogOut,
 } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { AuthModal } from "./AuthModal";

@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../../lib/auth';
 import toast from 'react-hot-toast';
 import { AuthModal } from '../AuthModal';
 import { supabase } from '../../lib/supabase';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Loader2, Heart, MessageSquare } from 'lucide-react';
+import { ArrowLeft, Loader2 } from 'lucide-react';
 import BookingModal from './consultation/BookingModal';
 import { motion } from 'framer-motion';
 
@@ -98,7 +98,7 @@ export function Dashboard() {
     }
   }, [user]);
 
-  const fetchConsultantsWithAvailability = useCallback(async () => {
+  const fetchConsultantsWithAvailability = async () => {
       setLoadingConsultants(true);
       try {
           const { data: availableSlots, error: slotError } = await supabase
@@ -131,7 +131,7 @@ export function Dashboard() {
           setLoadingConsultants(false);
           setLoading(false);
       }
-  }, []);
+  };
 
   useEffect(() => {
       if (user) {
@@ -327,16 +327,28 @@ export function Dashboard() {
         </div>
       </motion.div>
 
-      {/* Modals */}
-      {selectedConsultant && (
+      {/* Booking Modal */}
+      {isBookingModalOpen && selectedConsultant && (
         <BookingModal
           isOpen={isBookingModalOpen}
           onClose={closeBookingModal}
-          consultant={selectedConsultant}
+          consultantId={selectedConsultant.id}
+          consultantName={selectedConsultant.name}
+          onBookingSuccess={() => {
+            closeBookingModal();
+            // You might want to add a success notification or refresh the consultations list here
+          }}
         />
       )}
-      
-      <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
+
+      {/* Auth Modal */}
+      {showAuthModal && (
+        <AuthModal
+          isOpen={showAuthModal}
+          onClose={() => setShowAuthModal(false)}
+          isSignUpMode={false}
+        />
+      )}
     </div>
   );
 }

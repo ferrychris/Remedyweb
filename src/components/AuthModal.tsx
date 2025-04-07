@@ -1,291 +1,128 @@
-import React, { useState, useEffect } from 'react';
-import { X } from 'lucide-react';
-import { useAuth } from '../lib/auth';
-import toast from 'react-hot-toast';
+import { useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { AuthError, Session } from '@supabase/supabase-js';
+import toast from 'react-hot-toast';
+import { X } from 'lucide-react';
 
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
-  defaultIsSignUp?: boolean;
+  isSignUpMode: boolean;
 }
 
-export function AuthModal({ isOpen, onClose, defaultIsSignUp = false }: AuthModalProps) {
+export function AuthModal({ isOpen, onClose, isSignUpMode }: AuthModalProps): JSX.Element {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [isSignUp, setIsSignUp] = useState(defaultIsSignUp);
-  const [formData, setFormData] = useState({
-    email: '',
-    password: '',
-    confirmPassword: '',
-  });
-  const [touchedFields, setTouchedFields] = useState({
-    email: false,
-    password: false,
-    confirmPassword: false,
-  });
-
-  const { signIn, signUp } = useAuth();
-  useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (session) {
-        onClose();
-      }
-    });
-  
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [onClose]);
-
-  useEffect(() => {
-    if (!isOpen) {
-      // Reset form state when modal closes
-      setFormData({ email: '', password: '', confirmPassword: '' });
-      setError(null);
-      setLoading(false);
-      setTouchedFields({ email: false, password: false, confirmPassword: false });
-      // Don't reset isSignUp here to preserve the state for reopening
-    }
-  }, [isOpen]);
-
-  useEffect(() => {
-    // Update isSignUp when defaultIsSignUp prop changes
-    setIsSignUp(defaultIsSignUp);
-  }, [defaultIsSignUp]);
-
-  if (!isOpen) return null;
-
-  const validateEmail = (email: string): boolean => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-  };
-  
-  const validatePassword = (password: string): boolean => {
-    return password.length >= 6;
-  };
-
-  const validateForm = () => {
-    if (!formData.email || !formData.password) {
-      setError('Please fill in all fields');
-      return false;
-    }
-    if (!validateEmail(formData.email)) {
-      setError('Please enter a valid email address');
-      return false;
-    }
-    if (!validatePassword(formData.password)) {
-      setError('Password must be at least 6 characters long');
-      return false;
-    }
-    if (isSignUp && formData.password !== formData.confirmPassword) {
-      setError('Passwords do not match');
-      return false;
-    }
-    return true;
-  };
+  const [mode, setMode] = useState<'signin' | 'signup'>(isSignUpMode ? 'signup' : 'signin');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (loading) return;
-
-    // Set all fields as touched on submit
-    setTouchedFields({ 
-      email: true, 
-      password: true, 
-      confirmPassword: isSignUp 
-    });
-
-    if (!validateForm()) return;
-
+    
+    if (!email || !password) {
+      toast.error('Please fill in all fields');
+      return;
+    }
+    
+    setLoading(true);
+    
     try {
-      setError(null);
-      setLoading(true);
-
-      if (isSignUp) {
-        // Sign up and create profile
-        await signUp(formData.email, formData.password);
-
-        // Log the attempt for debugging
-        console.log('Registration attempt:', {
-          email: formData.email,
-          profileCreation: true
+      if (mode === 'signup') {
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
         });
-
-        toast.success('Account created successfully! Please check your email to verify your account.');
+        
+        if (error) throw error;
+        
+        toast.success('Check your email for the confirmation link!');
       } else {
-        await signIn(formData.email, formData.password);
+        const { error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        
+        if (error) throw error;
+        
         toast.success('Successfully signed in!');
+        onClose();
       }
-      onClose();
     } catch (error: any) {
+      toast.error(error.message || 'An error occurred');
       console.error('Auth error:', error);
-      const errorMessage = error?.message || `Failed to ${isSignUp ? 'create account' : 'sign in'}`;
-      
-      // Log the error for debugging
-      console.error('Registration error:', {
-        email: formData.email,
-        error: errorMessage
-      });
-      
-      setError(errorMessage);
-      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
   };
-
-  const handleInputChange = (field: 'email' | 'password' | 'confirmPassword', value: string) => {
-    setError(null);
-    setFormData(prev => ({ 
-      ...prev, 
-      [field]: field === 'email' ? value.trim() : value 
-    }));
-    setTouchedFields(prev => ({ ...prev, [field]: true }));
-  };
-
+  
   const toggleMode = () => {
-    setIsSignUp(!isSignUp);
-    setError(null);
-    setFormData({ email: '', password: '', confirmPassword: '' });
-    setTouchedFields({ email: false, password: false, confirmPassword: false });
+    setMode(mode === 'signin' ? 'signup' : 'signin');
   };
-
+  
+  if (!isOpen) return <></>;
+  
   return (
-    <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white/90 rounded-3xl max-w-md w-full relative overflow-hidden shadow-xl">
-        <div className="p-8">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl max-w-md w-full p-6 relative shadow-xl">
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+          aria-label="Close"
+        >
+          <X size={20} />
+        </button>
+        
+        <h2 className="text-2xl font-semibold mb-6">
+          {mode === 'signup' ? 'Create Account' : 'Sign In'}
+        </h2>
+        
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+              Email
+            </label>
+            <input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              placeholder="your.email@example.com"
+              required
+            />
+          </div>
+          
+          <div>
+            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+              Password
+            </label>
+            <input
+              id="password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              placeholder="••••••••"
+              required
+            />
+          </div>
+          
           <button
-            onClick={onClose}
-            className="absolute top-6 right-6 text-gray-400 hover:text-gray-600 transition-colors"
+            type="submit"
             disabled={loading}
-            aria-label="Close"
+            className="w-full bg-emerald-500 text-white py-2 px-4 rounded-md hover:bg-emerald-600 transition-colors"
           >
-            <X className="h-5 w-5" />
+            {loading ? 'Processing...' : mode === 'signup' ? 'Sign Up' : 'Sign In'}
           </button>
-
-          <h2 className="text-2xl font-semibold text-gray-800 mb-8">
-            {isSignUp ? 'Create Account' : 'Log in'}
-          </h2>
-
-          {error && (
-            <div className="mb-6 p-4 bg-red-50/50 text-red-600 rounded-2xl text-sm" role="alert">
-              {error}
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <input
-                id="email"
-                type="email"
-                required
-                value={formData.email}
-                onChange={(e) => handleInputChange('email', e.target.value)}
-                className={`w-full px-4 py-3.5 bg-white rounded-2xl border-2 transition-colors duration-200
-                  ${touchedFields.email && !validateEmail(formData.email)
-                    ? 'border-red-200 focus:border-red-300'
-                    : 'border-gray-100 focus:border-emerald-300'
-                  } focus:ring focus:ring-emerald-100 focus:ring-opacity-50`}
-                disabled={loading}
-                placeholder="E-mail"
-                aria-invalid={touchedFields.email && !validateEmail(formData.email)}
-              />
-              {touchedFields.email && !validateEmail(formData.email) && (
-                <p className="mt-2 text-sm text-red-500">Please enter a valid email address</p>
-              )}
-            </div>
-
-            <div className="relative">
-              <input
-                id="password"
-                type="password"
-                required
-                value={formData.password}
-                onChange={(e) => handleInputChange('password', e.target.value)}
-                className={`w-full px-4 py-3.5 bg-white rounded-2xl border-2 transition-colors duration-200
-                  ${touchedFields.password && !validatePassword(formData.password)
-                    ? 'border-red-200 focus:border-red-300'
-                    : 'border-gray-100 focus:border-emerald-300'
-                  } focus:ring focus:ring-emerald-100 focus:ring-opacity-50`}
-                disabled={loading}
-                placeholder="Password"
-                aria-invalid={touchedFields.password && !validatePassword(formData.password)}
-              />
-              {touchedFields.password && !validatePassword(formData.password) && (
-                <p className="mt-2 text-sm text-red-500">Password must be at least 6 characters</p>
-              )}
-            </div>
-
-            {isSignUp && (
-              <div className="relative">
-                <input
-                  id="confirmPassword"
-                  type="password"
-                  required
-                  value={formData.confirmPassword}
-                  onChange={(e) => handleInputChange('confirmPassword', e.target.value)}
-                  className={`w-full px-4 py-3.5 bg-white rounded-2xl border-2 transition-colors duration-200
-                    ${touchedFields.confirmPassword && formData.password !== formData.confirmPassword
-                      ? 'border-red-200 focus:border-red-300'
-                      : 'border-gray-100 focus:border-emerald-300'
-                    } focus:ring focus:ring-emerald-100 focus:ring-opacity-50`}
-                  disabled={loading}
-                  placeholder="Confirm Password"
-                  aria-invalid={touchedFields.confirmPassword && formData.password !== formData.confirmPassword}
-                />
-                {touchedFields.confirmPassword && formData.password !== formData.confirmPassword && (
-                  <p className="mt-2 text-sm text-red-500">Passwords do not match</p>
-                )}
-              </div>
-            )}
-
-            {!isSignUp && (
-              <button
-                type="button"
-                onClick={() => {/* TODO: Implement forgot password */}}
-                className="text-sm text-emerald-600 hover:text-emerald-700 transition-colors"
-              >
-                Forgot your password?
-              </button>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-emerald-500 text-white py-3.5 rounded-2xl font-medium
-                hover:bg-emerald-600 focus:bg-emerald-600 transition-colors duration-200
-                disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-500/20"
-            >
-              {loading ? (
-                <span className="flex items-center justify-center gap-2">
-                  <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                  </svg>
-                  Processing...
-                </span>
-              ) : (
-                'Login'
-              )}
-            </button>
-
-            <div className="text-center text-sm">
-              <span className="text-gray-500">
-                {isSignUp ? 'Already have an account?' : "Don't have an account?"}
-              </span>
-              {' '}
-              <button
-                type="button"
-                onClick={toggleMode}
-                className="text-emerald-600 hover:text-emerald-700 font-medium transition-colors"
-                disabled={loading}
-              >
-                {isSignUp ? 'Sign in' : 'Sign up'}
-              </button>
-            </div>
-          </form>
+        </form>
+        
+        <div className="mt-4 text-center">
+          <button
+            type="button"
+            onClick={toggleMode}
+            className="text-sm text-emerald-600 hover:text-emerald-700"
+          >
+            {mode === 'signup' ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
+          </button>
         </div>
       </div>
     </div>

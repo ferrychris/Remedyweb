@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Search, X } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
@@ -17,7 +17,6 @@ export function SearchBar() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
 
   const handleSearch = async () => {
     if (searchQuery.length < 2) {
@@ -25,7 +24,6 @@ export function SearchBar() {
       return;
     }
 
-    setIsSearching(true);
     try {
       // Fetch remedies from Supabase
       const { data: remedyData, error: remedyError } = await supabase
@@ -79,8 +77,6 @@ export function SearchBar() {
       setResults([...remedyResults, ...ailmentResults, ...productResults]);
     } catch (error) {
       console.error('Search error:', error);
-    } finally {
-      setIsSearching(false);
     }
   };
 
