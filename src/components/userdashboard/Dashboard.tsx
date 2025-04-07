@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../lib/auth';
 import toast from 'react-hot-toast';
 import { AuthModal } from '../AuthModal';
@@ -98,40 +98,40 @@ export function Dashboard() {
     }
   }, [user]);
 
-  const fetchConsultantsWithAvailability = async () => {
-      setLoadingConsultants(true);
-      try {
-          const { data: availableSlots, error: slotError } = await supabase
-              .from('availability_slots')
-              .select('consultant_id')
-              .eq('is_booked', false)
-              .gt('start_time', new Date().toISOString());
+  const fetchConsultantsWithAvailability = useCallback(async () => {
+    setLoadingConsultants(true);
+    try {
+        const { data: availableSlots, error: slotError } = await supabase
+            .from('availability_slots')
+            .select('consultant_id')
+            .eq('is_booked', false)
+            .gt('start_time', new Date().toISOString());
 
-          if (slotError) throw slotError;
-          if (!availableSlots || availableSlots.length === 0) {
-              setAvailableConsultants([]);
-          } else {
-              const uniqueConsultantIds = [...new Set(availableSlots.map(slot => slot.consultant_id))];
+        if (slotError) throw slotError;
+        if (!availableSlots || availableSlots.length === 0) {
+            setAvailableConsultants([]);
+        } else {
+            const uniqueConsultantIds = [...new Set(availableSlots.map(slot => slot.consultant_id))];
 
-              const { data: consultants, error: consultantError } = await supabase
-                  .from('consultants')
-                  .select('id, name, specialty, bio')
-                  .in('id', uniqueConsultantIds);
+            const { data: consultants, error: consultantError } = await supabase
+                .from('consultants')
+                .select('id, name, specialty, bio')
+                .in('id', uniqueConsultantIds);
 
-              if (consultantError) throw consultantError;
+            if (consultantError) throw consultantError;
 
-              setAvailableConsultants(consultants || []);
-          }
+            setAvailableConsultants(consultants || []);
+        }
 
-      } catch (error: any) {
-          console.error("Error fetching available consultants:", error);
-          toast.error("Failed to load available consultants.");
-          setAvailableConsultants([]);
-      } finally {
-          setLoadingConsultants(false);
-          setLoading(false);
-      }
-  };
+    } catch (error: any) {
+        console.error("Error fetching available consultants:", error);
+        toast.error("Failed to load available consultants.");
+        setAvailableConsultants([]);
+    } finally {
+        setLoadingConsultants(false);
+        setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
       if (user) {
@@ -333,11 +333,6 @@ export function Dashboard() {
           isOpen={isBookingModalOpen}
           onClose={closeBookingModal}
           consultantId={selectedConsultant.id}
-          consultantName={selectedConsultant.name}
-          onBookingSuccess={() => {
-            closeBookingModal();
-            // You might want to add a success notification or refresh the consultations list here
-          }}
         />
       )}
 
@@ -346,7 +341,7 @@ export function Dashboard() {
         <AuthModal
           isOpen={showAuthModal}
           onClose={() => setShowAuthModal(false)}
-          isSignUpMode={false}
+          defaultIsSignUp={false}
         />
       )}
     </div>

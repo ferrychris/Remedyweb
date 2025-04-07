@@ -49,20 +49,71 @@ export function Orders() {
 
         if (ordersError) throw ordersError;
 
-        const ordersWithItems = await Promise.all(
+        if (!ordersData || ordersData.length === 0) {
+          setOrders([]);
+          return;
+        }
+
+        const processedOrders = await Promise.all(
           ordersData.map(async (order) => {
             const { data: itemsData, error: itemsError } = await supabase
               .from('order_items')
-              .select('id, order_id, product_id, quantity, price_at_purchase, product:products(name)')
+              .select('id, order_id, product_id, quantity, price_at_purchase, product:products(id, name, price, image)')
               .eq('order_id', order.id);
 
             if (itemsError) throw itemsError;
 
-            return { ...order, order_items: itemsData || [] };
+            // Transform the item data with proper typecasting to match OrderItem interface
+            const transformedItems = (itemsData || []).map(item => {
+              // Safely handle the product property regardless of format
+              let productObj: { id: string; name: string; price?: number; image?: string | null };
+              
+              if (item.product) {
+                // Handle either array or object format
+                const productData = Array.isArray(item.product) && item.product.length > 0
+                  ? item.product[0]
+                  : item.product;
+                  
+                // Ensure we have the required properties
+                productObj = {
+                  id: String(productData?.id || item.product_id || ''),
+                  name: String(productData?.name || 'Product'),
+                  price: typeof productData?.price === 'number' ? productData.price : undefined,
+                  image: productData?.image || null
+                };
+              } else {
+                // Fallback if no product data
+                productObj = {
+                  id: String(item.product_id || ''),
+                  name: 'Product',
+                  image: null
+                };
+              }
+              
+              return {
+                id: String(item.id),
+                order_id: String(item.order_id),
+                product_id: String(item.product_id),
+                quantity: Number(item.quantity),
+                price_at_purchase: Number(item.price_at_purchase),
+                product: productObj
+              } as OrderItem;
+            });
+
+            return {
+              id: String(order.id),
+              user_id: String(order.user_id),
+              total: Number(order.total),
+              status: String(order.status),
+              created_at: String(order.created_at),
+              updated_at: String(order.updated_at || ''),
+              shipping_address: order.shipping_address,
+              order_items: transformedItems
+            } as Order;
           })
         );
 
-        setOrders(ordersWithItems);
+        setOrders(processedOrders);
       } catch (error) {
         toast.error('Failed to load orders');
         console.error('Fetch orders error:', error);
