@@ -69,12 +69,12 @@ export function Orders() {
               let productObj: { id: string; name: string; price?: number; image?: string | null };
               
               if (item.product) {
-                // Handle either array or object format
+                // Handle either array or object format by using a type assertion
                 const productData = Array.isArray(item.product) && item.product.length > 0
-                  ? item.product[0]
-                  : item.product;
+                  ? item.product[0] as any
+                  : item.product as any;
                   
-                // Ensure we have the required properties
+                // Now safely access properties with proper null checking
                 productObj = {
                   id: String(productData?.id || item.product_id || ''),
                   name: String(productData?.name || 'Product'),
