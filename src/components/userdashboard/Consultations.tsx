@@ -2,8 +2,9 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/auth';
+import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
-import { Clock, Calendar, CreditCard, User, Wallet, CheckCircle, RefreshCw, X } from 'lucide-react';
+import { User, Calendar } from 'lucide-react';
 import BookingModal from './consultation/BookingModal';
 
 interface Consultation {
@@ -15,71 +16,56 @@ interface Consultation {
   notes: string;
   created_at: string;
   updated_at: string;
-  consultant?: {
-    name: string;
-    specialty: string;
-  };
+  consultant?: ConsultantProfile;
 }
 
-interface Consultant {
+interface ConsultantProfile {
   id: string;
-  name: string;
+  user_id: string;
+  email: string;
+  first_name: string;
+  last_name: string;
   specialty: string;
-  bio?: string;
-  hourly_rate?: number;
-  rating?: number;
-  is_active?: boolean;
-  status?: string;
-  availability_slots?: AvailabilitySlot[];
+  bio: string;
+  status: string;
+  is_active: boolean;
+  created_at: string;
 }
 
-interface AvailabilitySlot {
+interface Availability {
   id: string;
   consultant_id: string;
+  day_of_week: number;
   start_time: string;
   end_time: string;
-  is_booked: boolean;
+  is_available: boolean;
 }
 
-interface ConsultantData {
-  name: string;
-  specialty: string;
+interface TimeSlot {
+  id: string;
+  startTime: string;
+  endTime: string;
+  day: number;
+  dayName: string;
+  dateString: string;
 }
 
 export function Consultations() {
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
   const [consultations, setConsultations] = useState<Consultation[]>([]);
-  const [consultants, setConsultants] = useState<Consultant[]>([]);
-  const [availableConsultants, setAvailableConsultants] = useState<Consultant[]>([]);
-  const [newConsultation, setNewConsultation] = useState({
-    consultant_id: '',
-    scheduled_for: '',
-    notes: '',
-  });
-  const [editingConsultation, setEditingConsultation] = useState<Consultation | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [loadingConsultants, setLoadingConsultants] = useState(true);
-  
-  // Modal state
-  const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
+  const [activeConsultants, setActiveConsultants] = useState<ConsultantProfile[]>([]);
   const [selectedConsultant, setSelectedConsultant] = useState<string | null>(null);
-  const [selectedConsultantName, setSelectedConsultantName] = useState<string>('');
-  
-  // Payment state
-  const [showPaymentForm, setShowPaymentForm] = useState(false);
-  const [paymentAmount, setPaymentAmount] = useState(0);
-  const [paymentMethod, setPaymentMethod] = useState<'card' | 'wallet'>('card');
-  const [cardDetails, setCardDetails] = useState({
-    cardNumber: '',
-    expiryDate: '',
-    cvv: '',
-    name: ''
-  });
+  const [availableSlots, setAvailableSlots] = useState<TimeSlot[]>([]);
+  const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null);
+  const [consultationNote, setConsultationNote] = useState('');
+  const [isBooking, setIsBooking] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [profile, _setProfile] = useState<any>(null);
 
   useEffect(() => {
     if (user) {
       fetchData();
-      fetchConsultantsWithAvailability();
     }
   }, [user]);
 
@@ -91,12 +77,13 @@ export function Consultations() {
 
       const { data: consultationsData, error: consultationsError } = await supabase
         .from('consultations')
-        .select('id, user_id, consultant_id, scheduled_for, status, notes, created_at, updated_at, consultant:consultants(name, specialty)')
+        .select('*, consultant:consultants(*)')
         .eq('user_id', user.id)
         .order('scheduled_for', { ascending: false });
 
       if (consultationsError) throw consultationsError;
       
+<<<<<<< HEAD
       const processedConsultations = (consultationsData || []).map(consultation => {
         let consultantData: ConsultantData | undefined = undefined;
         
@@ -106,10 +93,39 @@ export function Consultations() {
               'name' in consultation.consultant && 
               'specialty' in consultation.consultant) {
             const typedConsultant = consultation.consultant as { name: any; specialty: any };
+=======
+      console.log('Raw consultations data:', consultationsData);
+      
+      // Process and type the consultant data properly with stronger typing
+      const processedConsultations = (consultationsData || []).map(consultation => {
+        // Use a safe approach to handle any shape of consultant data
+        let consultantData: ConsultantProfile | undefined = undefined;
+        
+        if (consultation.consultant) {
+          // Handle the case where consultant might be an array
+          const consultantSource = Array.isArray(consultation.consultant) 
+            ? consultation.consultant[0] 
+            : consultation.consultant;
+          
+          if (consultantSource) {
+            // Safely extract all properties with fallbacks
+            const name = String(consultantSource.name || '');
+            const nameParts = name.split(' ');
+            
+>>>>>>> 70fa9a48920bff527ba1f6fbe46ba9ac11b6d780
             consultantData = {
-              name: String(typedConsultant.name || ''),
-              specialty: String(typedConsultant.specialty || '')
+              id: String(consultantSource.id || consultation.consultant_id || ''),
+              user_id: String(consultantSource.user_id || ''),
+              email: String(consultantSource.email || ''),
+              first_name: String(consultantSource.first_name || nameParts[0] || ''),
+              last_name: String(consultantSource.last_name || nameParts.slice(1).join(' ') || ''),
+              specialty: String(consultantSource.specialty || ''),
+              bio: String(consultantSource.bio || ''),
+              status: String(consultantSource.status || 'active'),
+              is_active: Boolean(consultantSource.is_active || true),
+              created_at: String(consultantSource.created_at || consultation.created_at || '')
             };
+<<<<<<< HEAD
           } else if (Array.isArray(consultation.consultant) && consultation.consultant.length > 0) {
             const firstItem = consultation.consultant[0] as { name: any; specialty: any } | null;
             if (firstItem && typeof firstItem === 'object' && 'name' in firstItem && 'specialty' in firstItem) {
@@ -118,20 +134,23 @@ export function Consultations() {
                 specialty: String(firstItem.specialty || '')
               };
             }
+=======
+>>>>>>> 70fa9a48920bff527ba1f6fbe46ba9ac11b6d780
           }
         }
         
+        // Create a properly typed consultation object
         return {
-          id: String(consultation.id),
-          user_id: String(consultation.user_id),
-          consultant_id: String(consultation.consultant_id),
-          scheduled_for: String(consultation.scheduled_for),
-          status: String(consultation.status),
+          id: String(consultation.id || ''),
+          user_id: String(consultation.user_id || ''),
+          consultant_id: String(consultation.consultant_id || ''),
+          scheduled_for: String(consultation.scheduled_for || ''),
+          status: String(consultation.status || ''),
           notes: String(consultation.notes || ''),
-          created_at: String(consultation.created_at),
-          updated_at: String(consultation.updated_at),
+          created_at: String(consultation.created_at || ''),
+          updated_at: String(consultation.updated_at || ''),
           consultant: consultantData
-        };
+        } as Consultation;
       });
       
       setConsultations(processedConsultations);
@@ -143,6 +162,7 @@ export function Consultations() {
     }
   };
 
+<<<<<<< HEAD
   // Updated fetchConsultantsWithAvailability function with enhanced logging and error handling
   const fetchConsultantsWithAvailability = async () => {
     if (!user) return;
@@ -377,6 +397,11 @@ export function Consultations() {
     } finally {
       setLoading(false);
     }
+=======
+  const handleScheduleConsultation = async () => {
+    // Implementation goes here
+    // This function is declared but not used in the current code
+>>>>>>> 70fa9a48920bff527ba1f6fbe46ba9ac11b6d780
   };
 
   const formatDateTime = (dateString: string) => {
@@ -390,7 +415,28 @@ export function Consultations() {
     return new Date(dateString).toLocaleString(undefined, options);
   };
 
-  if (loading && loadingConsultants) {
+  const handleCancelConsultation = async (consultationId: string) => {
+    try {
+      const { error } = await supabase
+        .from('consultations')
+        .update({ status: 'cancelled' })
+        .eq('id', consultationId);
+
+      if (error) throw error;
+      toast.success('Consultation cancelled');
+      fetchData(); // Refresh the data
+    } catch (error) {
+      console.error('Error cancelling consultation:', error);
+      toast.error('Failed to cancel consultation');
+    }
+  };
+
+  const handleBookingSuccess = () => {
+    toast.success('Booking successful!');
+    fetchData(); // Refresh the consultations list
+  };
+
+  if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
         <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-emerald-500"></div>
@@ -407,26 +453,25 @@ export function Consultations() {
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg sm:text-xl font-bold text-gray-800">Available Consultants</h2>
           <button
-            onClick={fetchConsultantsWithAvailability}
+            onClick={fetchData}
             className="text-sm text-emerald-600 hover:text-emerald-700 flex items-center"
           >
-            <RefreshCw className="h-4 w-4 mr-1" />
             <span className="hidden sm:inline">Refresh</span>
           </button>
         </div>
         
-        {loadingConsultants ? (
+        {loading ? (
           <div className="flex justify-center items-center h-24">
             <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-emerald-500"></div>
           </div>
-        ) : availableConsultants.length === 0 ? (
+        ) : activeConsultants.length === 0 ? (
           <div className="text-center py-8">
             <p className="text-gray-600">No active consultants found at this time.</p>
             <p className="text-gray-500 mt-2">Please check back later.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-            {availableConsultants.map(consultant => (
+            {activeConsultants.map(consultant => (
               <div key={consultant.id} className="bg-white border border-gray-200 rounded-md overflow-hidden shadow-md hover:shadow-lg transition-shadow duration-300">
                 <div className="p-4 sm:p-6">
                   <div className="flex items-start justify-between">
@@ -435,15 +480,10 @@ export function Consultations() {
                         <User className="h-5 sm:h-6 w-5 sm:w-6" />
                       </div>
                       <div className="ml-3 sm:ml-4">
-                        <h3 className="text-base sm:text-lg font-semibold text-gray-800">Dr. {consultant.name}</h3>
+                        <h3 className="text-base sm:text-lg font-semibold text-gray-800">Dr. {consultant.first_name} {consultant.last_name}</h3>
                         <p className="text-xs sm:text-sm text-gray-600">{consultant.specialty}</p>
                       </div>
                     </div>
-                    {consultant.rating && (
-                      <div className="bg-emerald-50 px-2 py-1 rounded-md text-emerald-700 text-xs sm:text-sm font-medium">
-                        ★ {consultant.rating}
-                      </div>
-                    )}
                   </div>
                   
                   {consultant.bio && (
@@ -453,9 +493,10 @@ export function Consultations() {
                   <div className="mt-3 sm:mt-4">
                     <div className="flex justify-between items-center mb-1 sm:mb-2">
                       <h4 className="text-xs sm:text-sm font-medium text-gray-700">Availability</h4>
-                      <span className="text-xs text-emerald-600">{consultant.availability_slots?.length || 0} slots</span>
+                      <span className="text-xs text-emerald-600">{availableSlots.length} slots</span>
                     </div>
                     
+<<<<<<< HEAD
                     {consultant.availability_slots && consultant.availability_slots.length > 0 ? (
                       <div className="space-y-1 sm:space-y-2 max-h-24 sm:max-h-32 overflow-y-auto">
                         {consultant.availability_slots.slice(0, 3).map(slot => (
@@ -475,10 +516,28 @@ export function Consultations() {
                     ) : (
                       <p className="text-xs sm:text-sm text-gray-500">No available slots at this time.</p>
                     )}
+=======
+                    <div className="space-y-1 sm:space-y-2 max-h-24 sm:max-h-32 overflow-y-auto">
+                      {availableSlots.slice(0, 3).map(slot => (
+                        <div key={slot.id} className="flex items-center justify-between bg-gray-50 px-2 sm:px-3 py-1 sm:py-2 rounded-md">
+                          <div className="flex items-center text-xs sm:text-sm text-gray-600">
+                            <Calendar className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
+                            <span className="truncate max-w-[180px]">{formatDateTime(slot.dateString)}</span>
+                          </div>
+                        </div>
+                      ))}
+                      {(availableSlots.length || 0) > 3 && (
+                        <div className="text-center text-xs text-emerald-600">
+                          +{(availableSlots.length || 0) - 3} more slots
+                        </div>
+                      )}
+                    </div>
+>>>>>>> 70fa9a48920bff527ba1f6fbe46ba9ac11b6d780
                   </div>
                   
                   <div className="mt-4 sm:mt-5 flex justify-between items-center">
                     <div className="text-emerald-600 font-semibold text-sm sm:text-base">
+<<<<<<< HEAD
                       ${consultant.hourly_rate || 0}/hour
                     </div>
                     <button
@@ -489,6 +548,13 @@ export function Consultations() {
                           : 'bg-gray-300 text-gray-500 cursor-not-allowed'
                       }`}
                       disabled={!(consultant.availability_slots && consultant.availability_slots.length > 0)}
+=======
+                      ${consultant.specialty === 'Psychologist' ? '50' : '30'}/hour
+                    </div>
+                    <button
+                      onClick={() => setSelectedConsultant(consultant.id)}
+                      className="px-3 sm:px-4 py-1.5 sm:py-2 text-sm bg-emerald-600 text-white rounded-md hover:bg-emerald-700 transition-colors"
+>>>>>>> 70fa9a48920bff527ba1f6fbe46ba9ac11b6d780
                     >
                       Book Now
                     </button>
@@ -534,7 +600,7 @@ export function Consultations() {
                       <tr key={consultation.id}>
                         <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-gray-900">
                           <div className="truncate max-w-[100px] sm:max-w-none">
-                            {consultation.consultant?.name || 'Unknown'} 
+                            {consultation.consultant?.first_name} {consultation.consultant?.last_name} 
                             <span className="hidden sm:inline">({consultation.consultant?.specialty || ''})</span>
                           </div>
                         </td>
@@ -555,56 +621,17 @@ export function Consultations() {
                           </span>
                         </td>
                         <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-gray-500 hidden sm:table-cell">
-                          {editingConsultation?.id === consultation.id ? (
-                            <textarea
-                              value={editingConsultation.notes || ''}
-                              onChange={(e) =>
-                                setEditingConsultation({ ...editingConsultation, notes: e.target.value })
-                              }
-                              className="border p-2 w-full rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                              rows={2}
-                            />
-                          ) : (
-                            <div className="truncate max-w-[200px]">
-                              {consultation.notes || 'No notes'}
-                            </div>
-                          )}
+                          {consultation.notes || 'No notes'}
                         </td>
                         <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-right text-xs sm:text-sm font-medium">
-                          {editingConsultation?.id === consultation.id ? (
-                            <div className="flex justify-end space-x-2">
-                              <button
-                                onClick={() => handleUpdateNotes(consultation.id, editingConsultation.notes || '')}
-                                className="text-emerald-600 hover:text-emerald-900"
-                              >
-                                Save
-                              </button>
-                              <button
-                                onClick={() => setEditingConsultation(null)}
-                                className="text-gray-600 hover:text-gray-900"
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="flex justify-end space-x-2">
-                              <button
-                                onClick={() => setEditingConsultation(consultation)}
-                                className="text-emerald-600 hover:text-emerald-900"
-                              >
-                                <span className="hidden sm:inline">Edit Notes</span>
-                                <span className="sm:hidden">Edit</span>
-                              </button>
-                              {consultation.status !== 'cancelled' && consultation.status !== 'completed' && (
-                                <button
-                                  onClick={() => handleCancelConsultation(consultation.id)}
-                                  className="text-red-600 hover:text-red-900"
-                                >
-                                  <span className="hidden sm:inline">Cancel</span>
-                                  <span className="sm:hidden">X</span>
-                                </button>
-                              )}
-                            </div>
+                          {consultation.status !== 'cancelled' && consultation.status !== 'completed' && (
+                            <button
+                              onClick={() => handleCancelConsultation(consultation.id)}
+                              className="text-red-600 hover:text-red-900"
+                            >
+                              <span className="hidden sm:inline">Cancel</span>
+                              <span className="sm:hidden">X</span>
+                            </button>
                           )}
                         </td>
                       </tr>
@@ -618,15 +645,19 @@ export function Consultations() {
       </div>
 
       {/* Booking Modal */}
+<<<<<<< HEAD
       {isBookingModalOpen && selectedConsultant && (
+=======
+      {selectedConsultant && (
+>>>>>>> 70fa9a48920bff527ba1f6fbe46ba9ac11b6d780
         <BookingModal
-          isOpen={isBookingModalOpen}
-          onClose={closeBookingModal}
+          isOpen={selectedConsultant !== null}
+          onClose={() => setSelectedConsultant(null)}
           consultantId={selectedConsultant}
-          consultantName={selectedConsultantName}
           onBookingSuccess={handleBookingSuccess}
         />
       )}
+<<<<<<< HEAD
 
       {/* Payment Modal */}
       {showPaymentForm && (
@@ -785,6 +816,8 @@ export function Consultations() {
           </div>
         </div>
       )}
+=======
+>>>>>>> 70fa9a48920bff527ba1f6fbe46ba9ac11b6d780
     </div>
   );
 }

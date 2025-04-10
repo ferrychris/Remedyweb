@@ -1,6 +1,6 @@
 import React from 'react';
+// import Navbar from './Navbar'; // This import is unused
 import { Outlet, useLocation } from 'react-router-dom';
-import Navbar from './Navbar';
 import Footer from './Footer';
 
 /**
@@ -20,7 +20,7 @@ const DashboardLayout: React.FC = () => {
   return (
     <div className="min-h-screen flex flex-col">
       {/* Only show Navbar if not on a dashboard route */}
-      {!isDashboardRoute && <Navbar />}
+      {/* {!isDashboardRoute && <Navbar />} */}
 
       {/* Main content */}
       <main className={`flex-1 ${!isDashboardRoute ? 'container mx-auto px-4 py-8' : ''}`}>

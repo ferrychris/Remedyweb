@@ -123,9 +123,21 @@ export function HealthTracking() {
       const { error } = await supabase.from('health_metrics').insert([metricData]);
 
       if (error) throw error;
+<<<<<<< HEAD
       toast.success('Health metric logged successfully');
       setNewMetric({});
       fetchHealthMetrics(); // Refresh metrics
+=======
+
+      setNewEntry({ rating: '', feedback: '' });
+      toast.success('Health tracking entry logged successfully!');
+      const { data: entries } = await supabase
+        .from('consultation_ratings')
+        .select('*')
+        .eq('patient_id', user?.id || '')
+        .order('created_at', { ascending: false });
+      setHealthEntries(entries as HealthTrackingEntry[] || []);
+>>>>>>> 70fa9a48920bff527ba1f6fbe46ba9ac11b6d780
     } catch (error) {
       toast.error('Failed to log health metric');
       console.error('Log metric error:', error);

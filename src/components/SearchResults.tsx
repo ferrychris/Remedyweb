@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+// import React from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { Leaf, Activity, ArrowLeft } from 'lucide-react';
 

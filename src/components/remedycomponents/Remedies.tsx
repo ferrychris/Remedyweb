@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 import  { useState, useEffect } from 'react';
+=======
+import { useState, useEffect } from 'react';
+>>>>>>> 70fa9a48920bff527ba1f6fbe46ba9ac11b6d780
 import { Link, useNavigate } from 'react-router-dom';
 import { ThumbsUp, MessageSquare, Search, Plus, Loader2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';

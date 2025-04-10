@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../lib/auth';
 import toast from 'react-hot-toast';
 import { AuthModal } from '../AuthModal';
 import { supabase } from '../../lib/supabase';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Loader2, Heart, MessageSquare } from 'lucide-react';
+import { ArrowLeft, Loader2 } from 'lucide-react';
 import BookingModal from './consultation/BookingModal';
 import { motion } from 'framer-motion';
 
@@ -99,38 +99,38 @@ export function Dashboard() {
   }, [user]);
 
   const fetchConsultantsWithAvailability = useCallback(async () => {
-      setLoadingConsultants(true);
-      try {
-          const { data: availableSlots, error: slotError } = await supabase
-              .from('availability_slots')
-              .select('consultant_id')
-              .eq('is_booked', false)
-              .gt('start_time', new Date().toISOString());
+    setLoadingConsultants(true);
+    try {
+        const { data: availableSlots, error: slotError } = await supabase
+            .from('availability_slots')
+            .select('consultant_id')
+            .eq('is_booked', false)
+            .gt('start_time', new Date().toISOString());
 
-          if (slotError) throw slotError;
-          if (!availableSlots || availableSlots.length === 0) {
-              setAvailableConsultants([]);
-          } else {
-              const uniqueConsultantIds = [...new Set(availableSlots.map(slot => slot.consultant_id))];
+        if (slotError) throw slotError;
+        if (!availableSlots || availableSlots.length === 0) {
+            setAvailableConsultants([]);
+        } else {
+            const uniqueConsultantIds = [...new Set(availableSlots.map(slot => slot.consultant_id))];
 
-              const { data: consultants, error: consultantError } = await supabase
-                  .from('consultants')
-                  .select('id, name, specialty, bio')
-                  .in('id', uniqueConsultantIds);
+            const { data: consultants, error: consultantError } = await supabase
+                .from('consultants')
+                .select('id, name, specialty, bio')
+                .in('id', uniqueConsultantIds);
 
-              if (consultantError) throw consultantError;
+            if (consultantError) throw consultantError;
 
-              setAvailableConsultants(consultants || []);
-          }
+            setAvailableConsultants(consultants || []);
+        }
 
-      } catch (error: any) {
-          console.error("Error fetching available consultants:", error);
-          toast.error("Failed to load available consultants.");
-          setAvailableConsultants([]);
-      } finally {
-          setLoadingConsultants(false);
-          setLoading(false);
-      }
+    } catch (error: any) {
+        console.error("Error fetching available consultants:", error);
+        toast.error("Failed to load available consultants.");
+        setAvailableConsultants([]);
+    } finally {
+        setLoadingConsultants(false);
+        setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -327,16 +327,23 @@ export function Dashboard() {
         </div>
       </motion.div>
 
-      {/* Modals */}
-      {selectedConsultant && (
+      {/* Booking Modal */}
+      {isBookingModalOpen && selectedConsultant && (
         <BookingModal
           isOpen={isBookingModalOpen}
           onClose={closeBookingModal}
-          consultant={selectedConsultant}
+          consultantId={selectedConsultant.id}
         />
       )}
-      
-      <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
+
+      {/* Auth Modal */}
+      {showAuthModal && (
+        <AuthModal
+          isOpen={showAuthModal}
+          onClose={() => setShowAuthModal(false)}
+          defaultIsSignUp={false}
+        />
+      )}
     </div>
   );
 }

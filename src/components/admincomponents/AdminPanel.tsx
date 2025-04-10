@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
@@ -11,14 +11,21 @@ import {
   ChevronRight,
   Menu,
   Stethoscope, // Added for Consultants icon
+  Home,
+  ActivitySquare,
+  UserCog,
+  ShoppingCart,
+  LogOut,
+  X
 } from 'lucide-react';
+import { useAuth } from '../../lib/auth';
 
 // Import the management components
-import { AilmentsManagement } from './AilmentsManagement';
-import { RemediesManagement } from './RemediesManagement';
-import { StoreManagement } from './StoreManagement';
-import { AdminDashboard } from './AdminDashboard';
-import { ConsultantsManagement } from './ConsultantsManagement'; // Added ConsultantsManagement
+// import { AilmentsManagement } from './AilmentsManagement';
+// import { RemediesManagement } from './RemediesManagement';
+// import { StoreManagement } from './StoreManagement';
+// import { AdminDashboard } from './AdminDashboard';
+// import { ConsultantsManagement } from './ConsultantsManagement'; // Added ConsultantsManagement
 
 interface AdminPanelProps {}
 
@@ -28,66 +35,64 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
   const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useAuth();
 
   useEffect(() => {
-    console.log('AdminPanel useEffect triggered');
+    if (!user) {
+      navigate('/adminlogin');
+      return;
+    }
+    
     checkAdminStatus();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   const checkAdminStatus = async () => {
     try {
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError) {
-        console.error('User fetch error:', userError);
-        throw new Error('Failed to get user: ' + userError.message);
-      }
       if (!user) {
-        toast.error('Please log in to access admin panel');
         navigate('/adminlogin');
         return;
       }
-
-      const { data: profile, error: profileError } = await supabase
-        .from('user_profiles') // Ensure this matches your table
-        .select('is_admin')
-        .eq('id', user.id)
+      
+      const { data, error } = await supabase
+        .from('admins')
+        .select('*')
+        .eq('user_id', user.id)
         .single();
-
-      if (profileError) {
-        console.error('Profile fetch error:', profileError);
-        if (profileError.code === 'PGRST116') {
-          toast.error('User profile not found. Please complete your profile setup.');
-        } else {
-          toast.error('Failed to verify admin status: ' + profileError.message);
-        }
-        navigate('/adminlogin');
-        return;
-      }
-
-      if (!profile?.is_admin) {
-        toast.error('Unauthorized access');
+      
+      if (error) {
+        console.error('Error checking admin status:', error.message);
         navigate('/');
         return;
       }
-
-      setIsAdmin(true);
-    } catch (error) {
-      console.error('Admin check error:', error);
-      toast.error('Error checking admin status: ' + (error.message || 'Unknown error'));
-      navigate('/adminlogin');
-    } finally {
+      
+      if (!data) {
+        navigate('/');
+        toast.error('Unauthorized access');
+      }
+      
       setIsLoading(false);
+    } catch (error: any) {
+      console.error('Admin check error:', error.message);
+      navigate('/');
     }
   };
 
-  const handleSignOut = async () => {
+  const handleLogout = async () => {
     try {
-      await supabase.auth.signOut();
-      toast.success('Signed out successfully');
-      navigate('/adminlogin');
-    } catch (error) {
-      console.error('Sign out error:', error);
-      toast.error('Error signing out: ' + (error.message || 'Unknown error'));
+      const { error } = await supabase.auth.signOut();
+      
+      if (error) {
+        console.error('Logout error:', error.message);
+        toast.error('Failed to logout');
+        return;
+      }
+      
+      navigate('/');
+      toast.success('Logged out successfully');
+    } catch (error: any) { // Type the error as any for now
+      console.error('Logout error:', error.message);
+      toast.error('Failed to logout');
     }
   };
 
@@ -164,7 +169,7 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
 
             {/* Sign Out Button */}
             <button
-              onClick={handleSignOut}
+              onClick={handleLogout}
               className="w-full mt-4 flex items-center space-x-3 p-3 rounded-lg text-red-600 hover:bg-red-50"
             >
               <span>Sign Out</span>

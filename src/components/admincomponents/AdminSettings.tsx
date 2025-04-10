@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 
@@ -10,6 +10,27 @@ interface Profile {
   bio: string | null;
   created_at: string;
   is_admin: string | null;
+}
+
+// Properly type errors
+interface ErrorWithMessage {
+  message: string;
+}
+
+function isErrorWithMessage(error: unknown): error is ErrorWithMessage {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'message' in error &&
+    typeof (error as Record<string, unknown>).message === 'string'
+  );
+}
+
+function getErrorMessage(error: unknown): string {
+  if (isErrorWithMessage(error)) {
+    return error.message;
+  }
+  return 'An unknown error occurred';
 }
 
 export function AdminSettings() {
@@ -49,7 +70,7 @@ export function AdminSettings() {
       setProfiles(data || []);
     } catch (err) {
       console.error(err);
-      toast.error(err.message);
+      toast.error(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -106,20 +127,21 @@ export function AdminSettings() {
       await fetchProfiles();
       setEditingProfile(null);
     } catch (err) {
-      console.error(err);
-      toast.error(err.message);
+      console.error('Error updating profile:', err);
+      toast.error(getErrorMessage(err));
     } finally {
       setActionLoading(null);
     }
   };
 
-  const handleDeleteProfile = async (profileId: number) => {
+  const handleDeleteProfile = async (profileId: string | number) => {
+    const profileIdString = profileId.toString();
     try {
-      setActionLoading(profileId.toString());
+      setActionLoading(profileIdString);
       const { error } = await supabase
         .from('profiles')
         .delete()
-        .eq('id', profileId);
+        .eq('id', profileIdString);
 
       if (error) {
         if (error.code === '42501') {
@@ -131,8 +153,8 @@ export function AdminSettings() {
       toast.success('Profile deleted successfully');
       await fetchProfiles();
     } catch (err) {
-      console.error(err);
-      toast.error(err.message);
+      console.error('Error deleting profile:', err);
+      toast.error(getErrorMessage(err));
     } finally {
       setActionLoading(null);
     }

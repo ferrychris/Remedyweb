@@ -4,8 +4,6 @@ import {
   Leaf,
   ShoppingBag,
   Home,
-  Settings,
-  Stethoscope,
   Activity,
   UserCircle,
   Search,
@@ -14,6 +12,8 @@ import {
 import { useAuth } from "../lib/auth";
 import { AuthModal } from "./AuthModal";
 import { SearchBar } from "./SearchBar";
+import { motion, AnimatePresence } from 'framer-motion';
+import UserNavbar from './userdashboard/UserNavbar';
 
 function Navbar({ toggleSidebar }) {
   const { user, profile, isAdmin, signOut } = useAuth();

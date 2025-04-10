@@ -12,8 +12,11 @@ interface Consultation {
   status: string;
   notes?: string;
   consultant?: {
-    name: string;
-    specialty: string;
+    id?: string;
+    name?: string;
+    first_name?: string;
+    last_name?: string;
+    specialty?: string;
   };
 }
 
@@ -63,13 +66,44 @@ export function Overview() {
         // Fetch recent consultations
         const { data: consultationsData, error: consultationsError } = await supabase
           .from('consultations')
-          .select('id, scheduled_for, status, notes, consultant:consultants(name, specialty)')
+          .select('id, scheduled_for, status, notes, consultant:consultants(*)')
           .eq('user_id', user.id)
           .order('scheduled_for', { ascending: false })
           .limit(3);
 
         if (consultationsError) throw consultationsError;
-        setConsultations(consultationsData || []);
+        
+        // Transform the data to match our interface
+        const processedConsultations = (consultationsData || []).map(consultation => {
+          // Handle different consultant data structures
+          let consultantData = null;
+          
+          if (consultation.consultant) {
+            const consultantSource = Array.isArray(consultation.consultant) 
+              ? consultation.consultant[0] 
+              : consultation.consultant;
+            
+            if (consultantSource) {
+              consultantData = {
+                id: consultantSource.id,
+                name: consultantSource.name || `${consultantSource.first_name || ''} ${consultantSource.last_name || ''}`.trim(),
+                first_name: consultantSource.first_name,
+                last_name: consultantSource.last_name,
+                specialty: consultantSource.specialty
+              };
+            }
+          }
+          
+          return {
+            id: consultation.id,
+            scheduled_for: consultation.scheduled_for,
+            status: consultation.status,
+            notes: consultation.notes,
+            consultant: consultantData
+          };
+        });
+        
+        setConsultations(processedConsultations);
 
         // Fetch recent health metrics
         const { data: healthData, error: healthError } = await supabase

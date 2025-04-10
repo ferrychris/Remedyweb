@@ -5,8 +5,18 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/auth';
 import toast from 'react-hot-toast';
-import { Product } from '../../../types';
 import { useNavigate } from 'react-router-dom';
+
+// Define Product type
+interface Product {
+  id: string;
+  name: string;
+  price: number;
+  description?: string;
+  category: string;
+  image?: string;
+  slug?: string;
+}
 
 export function Store() {
   const { user } = useAuth();
@@ -22,14 +32,6 @@ export function Store() {
   }[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [shippingAddress, setShippingAddress] = useState({
-    street: '',
-    city: '',
-    state: '',
-    postalCode: '',
-    country: '',
-  });
 
   // Fetch products from Supabase
   useEffect(() => {
@@ -101,58 +103,27 @@ export function Store() {
       return;
     }
 
-    setShowConfirmModal(true);
-  };
-
-  // Confirm checkout with shipping address
-  const confirmCheckout = async () => {
-    if (!shippingAddress.street || !shippingAddress.city || !shippingAddress.postalCode || !shippingAddress.country) {
-      toast.error('Please fill in all shipping address fields');
-      return;
-    }
-
-    setShowConfirmModal(false);
+    // Save cart items to database before redirecting to checkout
     try {
-      // Create a new order
-      const { data: orderData, error: orderError } = await supabase
-        .from('orders')
-        .insert({
+      for (const item of cart) {
+        const { error } = await supabase.from('cart_items').upsert({
           user_id: user.id,
-          total: cartTotal,
-          status: 'pending',
-          shipping_address: shippingAddress,
-        })
-        .select()
-        .single();
-
-      if (orderError) throw orderError;
-
-      const orderId = orderData.id;
-
-      // Create order items
-      const orderItems = cart.map((item) => ({
-        order_id: orderId,
-        product_id: item.id,
-        quantity: item.quantity,
-        price_at_purchase: item.price,
-      }));
-
-      const { error: itemsError } = await supabase
-        .from('order_items')
-        .insert(orderItems);
-
-      if (itemsError) throw itemsError;
-
-      // Clear the cart
-      setCart([]);
-      setCartOpen(false);
-      toast.success('Order placed successfully!');
+          product_id: item.id,
+          quantity: item.quantity
+        }, {
+          onConflict: 'user_id, product_id'
+        });
+        
+        if (error) throw error;
+      }
       
-      // Redirect to Orders section
-      navigate('/dashboard?section=orders');
+      // Close cart and navigate to checkout page
+      setCartOpen(false);
+      navigate('/store/checkout');
+      
     } catch (error) {
-      toast.error('Failed to place order');
-      console.error('Checkout error:', error);
+      console.error('Error saving cart:', error);
+      toast.error('Failed to proceed to checkout');
     }
   };
 
@@ -351,107 +322,6 @@ export function Store() {
                 >
                   Checkout
                 </button>
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-
-      {/* Checkout Modal - Consistent border radius */}
-      <AnimatePresence>
-        {showConfirmModal && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 0.5 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black z-40"
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              className="fixed inset-0 z-50 flex items-center justify-center p-4"
-            >
-              <div className="bg-white rounded-md shadow-xl w-full max-w-md mx-auto">
-                <div className="p-4 border-b">
-                  <h2 className="text-lg font-semibold">Complete Your Order</h2>
-                </div>
-                <div className="p-4">
-                  <h3 className="font-medium mb-3">Shipping Address</h3>
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Street Address</label>
-                      <input
-                        type="text"
-                        value={shippingAddress.street}
-                        onChange={(e) => setShippingAddress({ ...shippingAddress, street: e.target.value })}
-                        className="w-full px-3 py-2 border rounded-md text-sm"
-                        required
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
-                        <input
-                          type="text"
-                          value={shippingAddress.city}
-                          onChange={(e) => setShippingAddress({ ...shippingAddress, city: e.target.value })}
-                          className="w-full px-3 py-2 border rounded-md text-sm"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
-                        <input
-                          type="text"
-                          value={shippingAddress.state}
-                          onChange={(e) => setShippingAddress({ ...shippingAddress, state: e.target.value })}
-                          className="w-full px-3 py-2 border rounded-md text-sm"
-                        />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Postal Code</label>
-                        <input
-                          type="text"
-                          value={shippingAddress.postalCode}
-                          onChange={(e) => setShippingAddress({ ...shippingAddress, postalCode: e.target.value })}
-                          className="w-full px-3 py-2 border rounded-md text-sm"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Country</label>
-                        <input
-                          type="text"
-                          value={shippingAddress.country}
-                          onChange={(e) => setShippingAddress({ ...shippingAddress, country: e.target.value })}
-                          className="w-full px-3 py-2 border rounded-md text-sm"
-                          required
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="mt-6 flex items-center justify-between">
-                    <div className="text-green-600 font-semibold">Total: ${cartTotal.toFixed(2)}</div>
-                  </div>
-                </div>
-                <div className="p-4 border-t flex justify-end space-x-3">
-                  <button
-                    onClick={() => setShowConfirmModal(false)}
-                    className="px-4 py-2 border rounded-md text-sm"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={confirmCheckout}
-                    className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 text-sm"
-                  >
-                    Place Order
-                  </button>
-                </div>
               </div>
             </motion.div>
           </>
