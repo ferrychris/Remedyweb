@@ -1,8 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../../lib/supabase'; // Adjust the path to your Supabase client
+import { useAuth } from '../../lib/auth'; // Adjust the path to your auth hook
+import toast from 'react-hot-toast';
 import { Clock, Plus, X, Calendar } from 'lucide-react';
 
 interface AvailabilitySlot {
-  id: number;
+  id: string; // Changed to string since Supabase uses UUIDs
   day: string;
   startTime: string;
   endTime: string;
@@ -14,23 +17,120 @@ interface NewSlot {
   endTime: string;
 }
 
+interface Consultant {
+  id: string;
+  status: string;
+}
+
 function AvailabilityManager(): JSX.Element {
+  const { user } = useAuth(); // Get the logged-in user
+  const [consultant, setConsultant] = useState<Consultant | null>(null);
   const [isAvailable, setIsAvailable] = useState<boolean>(true);
   const [showCreateSlotForm, setShowCreateSlotForm] = useState<boolean>(false);
   const [newSlot, setNewSlot] = useState<NewSlot>({
     day: 'Monday',
     startTime: '09:00',
-    endTime: '10:00'
+    endTime: '10:00',
   });
-  const [availabilitySlots, setAvailabilitySlots] = useState<AvailabilitySlot[]>([
-    { id: 1, day: 'Monday', startTime: '09:00', endTime: '12:00' },
-    { id: 2, day: 'Wednesday', startTime: '13:00', endTime: '17:00' },
-    { id: 3, day: 'Friday', startTime: '10:00', endTime: '15:00' }
-  ]);
+  const [availabilitySlots, setAvailabilitySlots] = useState<AvailabilitySlot[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
 
-  const toggleAvailability = (): void => {
-    setIsAvailable(!isAvailable);
-    // TODO: Add API call to update backend status
+  // Fetch the consultant and their availability slots on mount
+  useEffect(() => {
+    if (!user) return;
+
+    const fetchConsultantAndSlots = async () => {
+      try {
+        setLoading(true);
+
+        // Fetch the consultant associated with the logged-in user
+        const { data: consultantData, error: consultantError } = await supabase
+          .from('consultants')
+          .select('id, status')
+          .eq('user_id', user.id)
+          .single();
+
+        if (consultantError) {
+          console.error('Error fetching consultant:', consultantError);
+          throw consultantError;
+        }
+
+        if (!consultantData) {
+          toast.error('No consultant profile found for this user.');
+          return;
+        }
+
+        setConsultant(consultantData);
+        setIsAvailable(consultantData.status === 'active');
+
+        // Fetch availability slots for the consultant
+        const { data: slotsData, error: slotsError } = await supabase
+          .from('availability_slots')
+          .select('id, consultant_id, start_time, end_time')
+          .eq('consultant_id', consultantData.id)
+          .eq('is_booked', false)
+          .gte('start_time', new Date().toISOString())
+          .order('start_time', { ascending: true });
+
+        if (slotsError) {
+          console.error('Error fetching availability slots:', slotsError);
+          throw slotsError;
+        }
+
+        // Map the slots to the format expected by the component
+        const formattedSlots: AvailabilitySlot[] = slotsData.map(slot => {
+          const startDate = new Date(slot.start_time);
+          const endDate = new Date(slot.end_time);
+          return {
+            id: slot.id,
+            day: startDate.toLocaleString('en-US', { weekday: 'long' }),
+            startTime: startDate.toLocaleTimeString('en-US', {
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: false,
+            }),
+            endTime: endDate.toLocaleTimeString('en-US', {
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: false,
+            }),
+          };
+        });
+
+        setAvailabilitySlots(formattedSlots);
+      } catch (error) {
+        toast.error('Failed to load availability data.');
+        console.error('Error in fetchConsultantAndSlots:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchConsultantAndSlots();
+  }, [user]);
+
+  const toggleAvailability = async (): Promise<void> => {
+    if (!consultant) return;
+
+    const newStatus = isAvailable ? 'inactive' : 'active';
+    try {
+      const { error } = await supabase
+        .from('consultants')
+        .update({ status: newStatus })
+        .eq('id', consultant.id);
+
+      if (error) {
+        console.error('Error updating consultant status:', error);
+        throw error;
+      }
+
+      setIsAvailable(!isAvailable);
+      setConsultant({ ...consultant, status: newStatus });
+      toast.success(`Availability ${newStatus === 'active' ? 'enabled' : 'disabled'} successfully.`);
+    } catch (error) {
+      toast.error('Failed to update availability status.');
+      console.error('Error in toggleAvailability:', error);
+    }
   };
 
   const handleCreateSlot = (): void => {
@@ -42,7 +142,7 @@ function AvailabilityManager(): JSX.Element {
     setNewSlot({
       day: 'Monday',
       startTime: '09:00',
-      endTime: '10:00'
+      endTime: '10:00',
     });
   };
 
@@ -50,35 +150,103 @@ function AvailabilityManager(): JSX.Element {
     const { name, value } = e.target;
     setNewSlot(prev => ({
       ...prev,
-      [name]: value
+      [name]: value,
     }));
   };
 
-  const handleAddSlot = (): void => {
-    const newId = availabilitySlots.length > 0 
-      ? Math.max(...availabilitySlots.map(slot => slot.id)) + 1 
-      : 1;
-    
-    setAvailabilitySlots([
-      ...availabilitySlots,
-      { 
-        id: newId, 
-        day: newSlot.day, 
-        startTime: newSlot.startTime, 
-        endTime: newSlot.endTime 
+  const handleAddSlot = async (): Promise<void> => {
+    if (!consultant) return;
+
+    try {
+      // Convert the day and time to a proper timestamp
+      const now = new Date();
+      const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      const todayIndex = now.getDay();
+      const targetDayIndex = daysOfWeek.indexOf(newSlot.day);
+      const daysDifference = (targetDayIndex - todayIndex + 7) % 7 || 7; // Ensure it's in the future
+
+      const startDate = new Date(now);
+      startDate.setDate(now.getDate() + daysDifference);
+      const [startHours, startMinutes] = newSlot.startTime.split(':').map(Number);
+      startDate.setHours(startHours, startMinutes, 0, 0);
+
+      const endDate = new Date(startDate);
+      const [endHours, endMinutes] = newSlot.endTime.split(':').map(Number);
+      endDate.setHours(endHours, endMinutes, 0, 0);
+
+      // Insert the new slot into the availability_slots table
+      const { data, error } = await supabase
+        .from('availability_slots')
+        .insert({
+          consultant_id: consultant.id,
+          start_time: startDate.toISOString(),
+          end_time: endDate.toISOString(),
+          is_booked: false,
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error adding availability slot:', error);
+        throw error;
       }
-    ]);
-    
-    handleCloseForm();
-    // TODO: Add API call to save in backend
+
+      // Add the new slot to the local state
+      setAvailabilitySlots([
+        ...availabilitySlots,
+        {
+          id: data.id,
+          day: newSlot.day,
+          startTime: newSlot.startTime,
+          endTime: newSlot.endTime,
+        },
+      ]);
+
+      handleCloseForm();
+      toast.success('Availability slot added successfully.');
+    } catch (error) {
+      toast.error('Failed to add availability slot.');
+      console.error('Error in handleAddSlot:', error);
+    }
   };
 
-  const handleDeleteSlot = (id: number): void => {
-    setAvailabilitySlots(availabilitySlots.filter(slot => slot.id !== id));
-    // TODO: Add API call to delete in backend
+  const handleDeleteSlot = async (id: string): Promise<void> => {
+    try {
+      const { error } = await supabase
+        .from('availability_slots')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        console.error('Error deleting availability slot:', error);
+        throw error;
+      }
+
+      setAvailabilitySlots(availabilitySlots.filter(slot => slot.id !== id));
+      toast.success('Availability slot deleted successfully.');
+    } catch (error) {
+      toast.error('Failed to delete availability slot.');
+      console.error('Error in handleDeleteSlot:', error);
+    }
   };
 
   const weekdays: string[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-emerald-500"></div>
+      </div>
+    );
+  }
+
+  if (!consultant) {
+    return (
+      <div className="p-4 bg-red-50 rounded-lg">
+        <p className="text-red-700">No consultant profile found. Please create a consultant profile to manage availability.</p>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -214,4 +382,4 @@ function AvailabilityManager(): JSX.Element {
   );
 }
 
-export default AvailabilityManager; 
+export default AvailabilityManager;

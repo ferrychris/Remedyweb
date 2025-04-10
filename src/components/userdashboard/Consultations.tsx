@@ -89,7 +89,6 @@ export function Consultations() {
     try {
       setLoading(true);
 
-      // Fetch user consultations
       const { data: consultationsData, error: consultationsError } = await supabase
         .from('consultations')
         .select('id, user_id, consultant_id, scheduled_for, status, notes, created_at, updated_at, consultant:consultants(name, specialty)')
@@ -98,13 +97,10 @@ export function Consultations() {
 
       if (consultationsError) throw consultationsError;
       
-      // Process and type the consultant data properly
       const processedConsultations = (consultationsData || []).map(consultation => {
-        // Handle case where consultant might be an array or an object or null
         let consultantData: ConsultantData | undefined = undefined;
         
         if (consultation.consultant) {
-          // Handle if it's an object with direct properties
           if (typeof consultation.consultant === 'object' && 
               !Array.isArray(consultation.consultant) && 
               'name' in consultation.consultant && 
@@ -114,9 +110,7 @@ export function Consultations() {
               name: String(typedConsultant.name || ''),
               specialty: String(typedConsultant.specialty || '')
             };
-          } 
-          // Handle if it's an array with one object
-          else if (Array.isArray(consultation.consultant) && consultation.consultant.length > 0) {
+          } else if (Array.isArray(consultation.consultant) && consultation.consultant.length > 0) {
             const firstItem = consultation.consultant[0] as { name: any; specialty: any } | null;
             if (firstItem && typeof firstItem === 'object' && 'name' in firstItem && 'specialty' in firstItem) {
               consultantData = {
@@ -149,6 +143,7 @@ export function Consultations() {
     }
   };
 
+  // Updated fetchConsultantsWithAvailability function with enhanced logging and error handling
   const fetchConsultantsWithAvailability = async () => {
     if (!user) return;
     
@@ -156,26 +151,20 @@ export function Consultations() {
     try {
       console.log('Fetching consultants with availability...');
       
-      // Fetch consultants who are active - check both is_active and status fields
-      // to handle potential database configuration discrepancies
+      // Fetch consultants where status is 'active'
       const { data: consultantsData, error: consultantsError } = await supabase
         .from('consultants')
         .select('id, name, specialty, bio, hourly_rate, rating, is_active, status')
-        .or('is_active.eq.true, status.eq.active');
+        .eq('status', 'active');
       
       if (consultantsError) {
         console.error('Error fetching consultants:', consultantsError);
         throw consultantsError;
       }
       
-      // Log the raw data for debugging
       console.log('Raw consultants data:', consultantsData);
       
-      // Filter out any consultants who might not be active
-      // This covers cases where either is_active or status might be used
-      const activeConsultants = consultantsData?.filter(consultant => 
-        (consultant.is_active === true || consultant.status === 'active')
-      ) || [];
+      const activeConsultants = consultantsData || [];
       
       if (activeConsultants.length === 0) {
         console.log('No active consultants found');
@@ -185,10 +174,10 @@ export function Consultations() {
         return;
       }
       
-      console.log(`Found ${activeConsultants.length} active consultants`);
+      console.log(`Found ${activeConsultants.length} active consultants:`, activeConsultants.map(c => c.name));
       setConsultants(activeConsultants);
       
-      // Then, for each consultant, fetch their availability slots
+      // Fetch availability slots for each consultant
       const consultantsWithSlots = await Promise.all(
         activeConsultants.map(async (consultant) => {
           console.log(`Fetching slots for consultant ${consultant.id} (${consultant.name})`);
@@ -202,14 +191,14 @@ export function Consultations() {
             .order('start_time', { ascending: true });
           
           if (slotsError) {
-            console.error(`Error fetching slots for consultant ${consultant.id}:`, slotsError);
+            console.error(`Error fetching slots for consultant ${consultant.id} (${consultant.name}):`, slotsError);
             return {
               ...consultant,
               availability_slots: []
             };
           }
           
-          console.log(`Found ${slotsData?.length || 0} slots for consultant ${consultant.id}`);
+          console.log(`Found ${slotsData?.length || 0} slots for consultant ${consultant.id} (${consultant.name}):`, slotsData);
           
           return {
             ...consultant,
@@ -218,18 +207,66 @@ export function Consultations() {
         })
       );
       
-      // Filter consultants to only include those with available slots
-      const consultantsWithAvailability = consultantsWithSlots.filter(
-        consultant => consultant.availability_slots.length > 0
+      // Log the final consultants with their slots
+      console.log(`Setting ${consultantsWithSlots.length} active consultants as available:`, 
+        consultantsWithSlots.map(c => ({
+          name: c.name,
+          slotCount: c.availability_slots?.length || 0
+        }))
       );
-      
-      console.log(`Found ${consultantsWithAvailability.length} consultants with available slots`);
-      setAvailableConsultants(consultantsWithAvailability);
+      setAvailableConsultants(consultantsWithSlots);
     } catch (error) {
       console.error('Error fetching consultants with availability:', error);
       toast.error('Failed to load available consultants');
     } finally {
       setLoadingConsultants(false);
+    }
+  };
+
+  // Optional: Function to seed availability slots (for development purposes)
+  const seedAvailabilitySlots = async (consultantId: string, consultantName: string) => {
+    try {
+      console.log(`Seeding availability slot for consultant ${consultantName} (${consultantId})`);
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1); // Tomorrow's date
+      tomorrow.setHours(10, 0, 0, 0); // 10:00 AM
+      
+      const endTime = new Date(tomorrow);
+      endTime.setHours(11, 0, 0, 0); // 11:00 AM
+      
+      const { error } = await supabase
+        .from('availability_slots')
+        .insert({
+          consultant_id: consultantId,
+          start_time: tomorrow.toISOString(),
+          end_time: endTime.toISOString(),
+          is_booked: false
+        });
+      
+      if (error) {
+        console.error(`Error seeding slot for consultant ${consultantName}:`, error);
+        throw error;
+      }
+      
+      console.log(`Successfully seeded slot for consultant ${consultantName}`);
+    } catch (error) {
+      console.error('Error seeding availability slots:', error);
+    }
+  };
+
+  // Optional: Call this function to seed slots if none exist (can be removed after initial setup)
+  const initializeAvailabilitySlots = async (activeConsultants: Consultant[]) => {
+    const { data: existingSlots } = await supabase
+      .from('availability_slots')
+      .select('consultant_id')
+      .in('consultant_id', activeConsultants.map(c => c.id));
+    
+    const consultantsWithSlots = new Set(existingSlots?.map(slot => slot.consultant_id));
+    
+    for (const consultant of activeConsultants) {
+      if (!consultantsWithSlots.has(consultant.id)) {
+        await seedAvailabilitySlots(consultant.id, consultant.name);
+      }
     }
   };
 
@@ -249,8 +286,6 @@ export function Consultations() {
       if (error) throw error;
       toast.success('Consultation scheduled successfully');
       setNewConsultation({ consultant_id: '', scheduled_for: '', notes: '' });
-
-      // Refresh consultations by calling fetchData
       fetchData();
     } catch (error) {
       toast.error('Failed to schedule consultation');
@@ -269,7 +304,7 @@ export function Consultations() {
       toast.success('Notes updated successfully');
       setConsultations(
         consultations.map((consultation) =>
-          consultation.id === consultationId ? { ...consultation, notes } : consultation
+          consultation.id === consultationId ? { ...consultant, notes } : consultation
         )
       );
       setEditingConsultation(null);
@@ -311,10 +346,8 @@ export function Consultations() {
   };
 
   const handleBookingSuccess = (slot: AvailabilitySlot, consultantId: string) => {
-    // Find consultant price
     const consultant = availableConsultants.find(c => c.id === consultantId);
     if (consultant && consultant.hourly_rate) {
-      // Calculate price based on slot duration
       const startTime = new Date(slot.start_time);
       const endTime = new Date(slot.end_time);
       const durationHours = (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60);
@@ -330,19 +363,13 @@ export function Consultations() {
   const handlePayment = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // In a real application, you would integrate with a payment processor like Stripe
-    // For demo purposes, we'll simulate a successful payment
-    
     try {
-      // Simulating payment processing delay
       setLoading(true);
       await new Promise(resolve => setTimeout(resolve, 1500));
       
-      // After successful payment, update the booking status
       toast.success('Payment successful! Your consultation is confirmed.');
       setShowPaymentForm(false);
       
-      // Refresh consultations list
       fetchData();
       fetchConsultantsWithAvailability();
     } catch (error) {
@@ -394,7 +421,7 @@ export function Consultations() {
           </div>
         ) : availableConsultants.length === 0 ? (
           <div className="text-center py-8">
-            <p className="text-gray-600">No consultants with availability found at this time.</p>
+            <p className="text-gray-600">No active consultants found at this time.</p>
             <p className="text-gray-500 mt-2">Please check back later.</p>
           </div>
         ) : (
@@ -429,30 +456,39 @@ export function Consultations() {
                       <span className="text-xs text-emerald-600">{consultant.availability_slots?.length || 0} slots</span>
                     </div>
                     
-                    <div className="space-y-1 sm:space-y-2 max-h-24 sm:max-h-32 overflow-y-auto">
-                      {consultant.availability_slots?.slice(0, 3).map(slot => (
-                        <div key={slot.id} className="flex items-center justify-between bg-gray-50 px-2 sm:px-3 py-1 sm:py-2 rounded-md">
-                          <div className="flex items-center text-xs sm:text-sm text-gray-600">
-                            <Calendar className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
-                            <span className="truncate max-w-[180px]">{formatDateTime(slot.start_time)}</span>
+                    {consultant.availability_slots && consultant.availability_slots.length > 0 ? (
+                      <div className="space-y-1 sm:space-y-2 max-h-24 sm:max-h-32 overflow-y-auto">
+                        {consultant.availability_slots.slice(0, 3).map(slot => (
+                          <div key={slot.id} className="flex items-center justify-between bg-gray-50 px-2 sm:px-3 py-1 sm:py-2 rounded-md">
+                            <div className="flex items-center text-xs sm:text-sm text-gray-600">
+                              <Calendar className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
+                              <span className="truncate max-w-[180px]">{formatDateTime(slot.start_time)}</span>
+                            </div>
                           </div>
-                        </div>
-                      ))}
-                      {(consultant.availability_slots?.length || 0) > 3 && (
-                        <div className="text-center text-xs text-emerald-600">
-                          +{(consultant.availability_slots?.length || 0) - 3} more slots
-                        </div>
-                      )}
-                    </div>
+                        ))}
+                        {consultant.availability_slots.length > 3 && (
+                          <div className="text-center text-xs text-emerald-600">
+                            +{(consultant.availability_slots.length - 3)} more slots
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-xs sm:text-sm text-gray-500">No available slots at this time.</p>
+                    )}
                   </div>
                   
                   <div className="mt-4 sm:mt-5 flex justify-between items-center">
                     <div className="text-emerald-600 font-semibold text-sm sm:text-base">
-                      ${consultant.hourly_rate}/hour
+                      ${consultant.hourly_rate || 0}/hour
                     </div>
                     <button
                       onClick={() => openBookingModal(consultant.id, consultant.name)}
-                      className="px-3 sm:px-4 py-1.5 sm:py-2 text-sm bg-emerald-600 text-white rounded-md hover:bg-emerald-700 transition-colors"
+                      className={`px-3 sm:px-4 py-1.5 sm:py-2 text-sm rounded-md transition-colors ${
+                        consultant.availability_slots && consultant.availability_slots.length > 0
+                          ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                          : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                      }`}
+                      disabled={!(consultant.availability_slots && consultant.availability_slots.length > 0)}
                     >
                       Book Now
                     </button>
@@ -581,7 +617,7 @@ export function Consultations() {
         )}
       </div>
 
-      {/* Booking Modal - Mobile Optimized */}
+      {/* Booking Modal */}
       {isBookingModalOpen && selectedConsultant && (
         <BookingModal
           isOpen={isBookingModalOpen}
@@ -592,7 +628,7 @@ export function Consultations() {
         />
       )}
 
-      {/* Payment Modal - Mobile Optimized */}
+      {/* Payment Modal */}
       {showPaymentForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-md shadow-lg w-full max-w-md p-4 sm:p-6 mx-auto">

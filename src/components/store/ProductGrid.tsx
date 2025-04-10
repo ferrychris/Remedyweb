@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import ProductCard from './ProductCard';
-import { supabase } from '../../lib/supabaseClient';
-import { Product } from '../../types/product';
+import { supabase } from '../../lib/supabase';
+import { Product } from '../../types';
 
 interface ProductGridProps {
   categoryId?: string;

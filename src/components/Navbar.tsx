@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
   Leaf,
@@ -9,27 +9,28 @@ import {
   Activity,
   UserCircle,
   Search,
+  Menu,
 } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { AuthModal } from "./AuthModal";
 import { SearchBar } from "./SearchBar";
 
-function Navbar() {
+function Navbar({ toggleSidebar }) {
   const { user, profile, isAdmin, signOut } = useAuth();
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [isSignUpMode, setIsSignUpMode] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
-  const accountMenuRef = useRef<HTMLDivElement>(null);
-  const accountButtonRef = useRef<HTMLButtonElement>(null);
+  const accountMenuRef = useRef(null);
+  const accountButtonRef = useRef(null);
   const location = useLocation();
 
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
+    function handleClickOutside(event) {
       if (
         accountMenuRef.current &&
         accountButtonRef.current &&
-        !accountMenuRef.current.contains(event.target as Node) &&
-        !accountButtonRef.current.contains(event.target as Node)
+        !accountMenuRef.current.contains(event.target) &&
+        !accountButtonRef.current.contains(event.target)
       ) {
         setAccountMenuOpen(false);
       }
@@ -39,11 +40,11 @@ function Navbar() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const isActive = (path: string) => {
+  const isActive = (path) => {
     return location.pathname === path;
   };
 
-  const openAuthModal = (signUp: boolean) => {
+  const openAuthModal = (signUp) => {
     setIsSignUpMode(signUp);
     setShowAuthModal(true);
   };
@@ -53,6 +54,14 @@ function Navbar() {
       <nav className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-lg border-b border-emerald-100/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-20">
+            {/* Hamburger Menu - Hidden on large screens */}
+            <button
+              onClick={toggleSidebar}
+              className="md:hidden focus:outline-none "
+            >
+              <Menu className="h-10 w-10 text-gray-600" />
+            </button>
+
             {/* Logo */}
             <Link
               to="/"
@@ -133,7 +142,6 @@ function Navbar() {
                       >
                         My Dashboard
                       </Link>
-                      {/* Consultant Dashboard link */}
                       <Link
                         to="/consultant-dashboard"
                         className="block px-4 py-2 text-sm text-gray-700 hover:bg-emerald-50 hover:text-emerald-600"
@@ -195,16 +203,7 @@ function Navbar() {
   );
 }
 
-// NavLink component for consistent styling
-function NavLink({
-  to,
-  children,
-  active,
-}: {
-  to: string;
-  children: React.ReactNode;
-  active: boolean;
-}) {
+function NavLink({ to, children, active }) {
   return (
     <Link
       to={to}
