@@ -18,7 +18,6 @@ interface AppointmentSlot {
   start_time: string;
   end_time: string;
   is_booked: boolean;
-  patient_id: string | null;
   created_at: string;
 }
 
@@ -31,7 +30,7 @@ interface NewSlotForm {
 }
 
 function ManageAvailability() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, role, loading: authLoading } = useAuth();
   const [consultants, setConsultants] = useState<Consultant[]>([]);
   const [selectedConsultantId, setSelectedConsultantId] = useState<string | null>(null);
   const [slots, setSlots] = useState<AppointmentSlot[]>([]);
@@ -45,15 +44,24 @@ function ManageAvailability() {
     endTime: '',
   });
 
+  // Log the role for debugging
+  useEffect(() => {
+    if (!authLoading) {
+      console.log('User role after auth loading:', role);
+    }
+  }, [authLoading, role]);
+
   // 1. Fetch All Consultants
   const fetchConsultants = useCallback(async () => {
     if (!user) {
       setError('User not authenticated. Please log in.');
+      setLoadingConsultants(false);
       return;
     }
 
     try {
       setLoadingConsultants(true);
+      setError(null);
       console.log('Fetching all consultants...');
       const { data, error } = await supabase
         .from('consultants')
@@ -67,20 +75,30 @@ function ManageAvailability() {
 
       if (!data || data.length === 0) {
         console.warn('No consultants found.');
-        setError('No consultants found in the system.');
+        setError('No consultants found in the system. Please add a consultant first.');
+        setConsultants([]);
+        setSelectedConsultantId(null);
         return;
       }
 
       console.log('Consultants fetched:', data);
       setConsultants(data);
+
+      // If the currently selected consultant ID is not in the new list, reset it
+      if (selectedConsultantId && !data.some(c => c.id === selectedConsultantId)) {
+        console.warn('Selected consultant ID not found in fetched data. Resetting selection.');
+        setSelectedConsultantId(null);
+      }
     } catch (err: any) {
       console.error('Error fetching consultants:', err);
       setError(err.message || 'Failed to fetch consultants.');
       toast.error('Failed to load consultants.');
+      setConsultants([]);
+      setSelectedConsultantId(null);
     } finally {
       setLoadingConsultants(false);
     }
-  }, [user]);
+  }, [user, selectedConsultantId]);
 
   // 2. Fetch Appointment Slots for the selected consultant
   const fetchSlots = useCallback(async () => {
@@ -90,7 +108,7 @@ function ManageAvailability() {
     try {
       const { data, error } = await supabase
         .from('appointments')
-        .select('id, consultant_id, date, start_time, end_time, is_booked, patient_id, created_at')
+        .select('id, consultant_id, date, start_time, end_time, is_booked, created_at')
         .eq('consultant_id', selectedConsultantId)
         .eq('is_booked', false) // Only fetch unbooked slots
         .order('date', { ascending: true })
@@ -109,10 +127,10 @@ function ManageAvailability() {
 
   // Fetch consultants when the component mounts, but only after auth loading is complete
   useEffect(() => {
-    if (!authLoading) {
+    if (!authLoading && role === 'admin') {
       fetchConsultants();
     }
-  }, [authLoading, fetchConsultants]);
+  }, [authLoading, fetchConsultants, role]);
 
   // Fetch slots when a consultant is selected
   useEffect(() => {
@@ -124,6 +142,7 @@ function ManageAvailability() {
   // 3. Handle Consultant Selection
   const handleConsultantChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const consultantId = e.target.value;
+    console.log('Selected consultant ID:', consultantId);
     setSelectedConsultantId(consultantId || null);
     setSlots([]); // Clear slots when changing consultant
   };
@@ -139,6 +158,14 @@ function ManageAvailability() {
     e.preventDefault();
     if (!selectedConsultantId) {
       toast.error('Please select a consultant.');
+      return;
+    }
+
+    // Validate that the selectedConsultantId exists in the consultants list
+    const selectedConsultant = consultants.find(c => c.id === selectedConsultantId);
+    if (!selectedConsultant) {
+      console.error('Selected consultant ID does not exist in consultants:', selectedConsultantId);
+      toast.error('The selected consultant does not exist. Please refresh the list and try again.');
       return;
     }
 
@@ -167,7 +194,31 @@ function ManageAvailability() {
         return;
       }
 
+      // Check for overlapping slots
+      const { data: existingSlots, error: fetchError } = await supabase
+        .from('appointments')
+        .select('start_time, end_time')
+        .eq('consultant_id', selectedConsultantId)
+        .eq('date', newSlot.startDate);
+
+      if (fetchError) throw fetchError;
+
+      const newStart = startDateTime.getTime();
+      const newEnd = endDateTime.getTime();
+
+      const hasOverlap = existingSlots?.some(slot => {
+        const slotStart = new Date(`${newSlot.startDate}T${slot.start_time}`).getTime();
+        const slotEnd = new Date(`${newSlot.startDate}T${slot.end_time}`).getTime();
+        return newStart < slotEnd && newEnd > slotStart;
+      });
+
+      if (hasOverlap) {
+        toast.error('This slot overlaps with an existing slot.');
+        return;
+      }
+
       setLoading(true);
+      console.log('Inserting new slot with consultant_id:', selectedConsultantId);
       const { error: insertError } = await supabase.from('appointments').insert({
         consultant_id: selectedConsultantId,
         date: newSlot.startDate,
@@ -183,7 +234,9 @@ function ManageAvailability() {
       fetchSlots();
     } catch (err: any) {
       console.error('Error adding slot:', err);
-      if (err.message?.includes('check constraint')) {
+      if (err.message?.includes('foreign key constraint')) {
+        toast.error('The selected consultant does not exist in the system. Please refresh and try again.');
+      } else if (err.message?.includes('check constraint')) {
         toast.error('End time must be after start time.');
       } else if (err.message?.includes('timestamp')) {
         toast.error('Invalid date/time format provided.');
@@ -261,16 +314,46 @@ function ManageAvailability() {
     return <p className="text-center text-red-600 p-4">Please log in to manage availability.</p>;
   }
 
+  // Check if the user is an admin
+  if (role !== 'admin') {
+    return (
+      <div className="text-center p-4">
+        <p className="text-red-600">Access Denied: Only admins can manage consultant availability.</p>
+        <p className="text-gray-600 mt-2">Your role: {role || 'unknown'}</p>
+      </div>
+    );
+  }
+
   if (loadingConsultants) {
     return <p className="text-center p-4">Loading consultants...</p>;
   }
 
   if (error && !loadingConsultants) {
-    return <p className="text-center text-red-600 p-4">Error: {error}</p>;
+    return (
+      <div className="text-center p-4">
+        <p className="text-red-600">Error: {error}</p>
+        <button
+          onClick={fetchConsultants}
+          className="mt-2 inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+        >
+          Refresh Consultants
+        </button>
+      </div>
+    );
   }
 
   if (!loadingConsultants && consultants.length === 0) {
-    return <p className="text-center text-orange-600 p-4">No consultants found in the system.</p>;
+    return (
+      <div className="text-center p-4">
+        <p className="text-orange-600">No consultants found in the system.</p>
+        <button
+          onClick={fetchConsultants}
+          className="mt-2 inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+        >
+          Refresh Consultants
+        </button>
+      </div>
+    );
   }
 
   return (
@@ -279,11 +362,21 @@ function ManageAvailability() {
 
       {/* Consultant Selection */}
       <div className="mb-8 p-6 border rounded-lg shadow-md bg-white">
-        <h2 className="text-xl font-semibold text-gray-700 mb-4">Select a Consultant</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-semibold text-gray-700">Select a Consultant</h2>
+          <button
+            onClick={fetchConsultants}
+            disabled={loadingConsultants}
+            className="inline-flex justify-center py-1 px-3 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+          >
+            {loadingConsultants ? 'Refreshing...' : 'Refresh'}
+          </button>
+        </div>
         <select
           value={selectedConsultantId || ''}
           onChange={handleConsultantChange}
-          className="w-full p-2 border rounded-md focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+          className="mt-4 w-full p-2 border rounded-md focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+          disabled={consultants.length === 0}
         >
           <option value="">-- Select a Consultant --</option>
           {consultants.map(consultant => (
@@ -364,7 +457,7 @@ function ManageAvailability() {
             </div>
             <button
               type="submit"
-              disabled={loading || !selectedConsultantId}
+              disabled={loading || !selectedConsultantId || consultants.length === 0}
               className="mt-5 inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading && !slots.length ? 'Adding...' : 'Add Slot'}
@@ -400,11 +493,6 @@ function ManageAvailability() {
                       >
                         Status: {slot.is_booked ? 'Booked' : 'Available'}
                       </p>
-                      {slot.is_booked && slot.patient_id && (
-                        <p className="text-xs text-gray-500 mt-1">
-                          Booked by User ID: {slot.patient_id}
-                        </p>
-                      )}
                       <p className="text-xs text-gray-400 mt-1">
                         Created: {new Date(slot.created_at).toLocaleString()}
                       </p>

@@ -1,152 +1,128 @@
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom'; // To get consultantId from URL
+import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../lib/auth';
+import toast from 'react-hot-toast';
 
-import { supabase, } from '../../lib/supabase';
+interface Consultant {
+  id: string;
+  name: string;
+  specialty: string;
+}
 
 interface AppointmentSlot {
   id: string;
+  consultant_id: string;
   date: string;
   start_time: string;
   end_time: string;
   is_booked: boolean;
+  created_at: string;
 }
 
-const BookAppointment: React.FC = () => {
-  const { consultantId } = useParams<{ consultantId: string }>(); // Get consultantId from URL
-  const [availableSlots, setAvailableSlots] = useState<AppointmentSlot[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+function BookAppointment() {
+  const { user } = useAuth();
+  const [consultants, setConsultants] = useState<Consultant[]>([]);
+  const [selectedConsultantId, setSelectedConsultantId] = useState<string | null>(null);
+  const [slots, setSlots] = useState<AppointmentSlot[]>([]);
+  const [loading, setLoading] = useState(false);
 
+  // Fetch consultants
   useEffect(() => {
-    const fetchAvailableSlots = async () => {
-      try {
-        setLoading(true);
-
-        // Check if the patient is authenticated
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) {
-          throw new Error('No user session found. Please sign in.');
-        }
-
-        if (!consultantId) {
-          throw new Error('Consultant ID is missing.');
-        }
-
-        // Fetch available slots (is_booked = false)
-        const now = new Date();
-        const currentDate = now.toISOString().split('T')[0];
-        const currentTime = now.toTimeString().split(' ')[0];
-
-        const { data, error } = await supabase
-          .from('appointments')
-          .select('id, date, start_time, end_time, is_booked')
-          .eq('consultant_id', consultantId)
-          .eq('is_booked', false)
-          .or(`date.gt.${currentDate},and(date.eq.${currentDate},start_time.gt.${currentTime})`)
-          .order('date', { ascending: true })
-          .order('start_time', { ascending: true });
-
-        if (error) throw error;
-
-        setAvailableSlots(data || []);
-      } catch (err) {
-        setError(err.message);
-        console.error('Fetch Available Slots Error:', err);
-      } finally {
-        setLoading(false);
+    const fetchConsultants = async () => {
+      const { data, error } = await supabase
+        .from('consultants')
+        .select('id, name, specialty')
+        .order('name', { ascending: true });
+      if (error) {
+        toast.error('Failed to load consultants.');
+        return;
       }
+      setConsultants(data || []);
     };
+    fetchConsultants();
+  }, []);
 
-    fetchAvailableSlots();
-  }, [consultantId]);
-
-  const handleBookAppointment = async (slotId: string) => {
-    try {
-      setSuccess(null);
-      setError(null);
-
-      // Check if the patient is authenticated
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        throw new Error('No user session found. Please sign in.');
-      }
-
-      const patientId = session.user.id;
-
-      // Book the slot by updating is_booked and patient_id
-      const { error } = await supabase
+  // Fetch available slots
+  useEffect(() => {
+    if (!selectedConsultantId) return;
+    const fetchSlots = async () => {
+      setLoading(true);
+      const { data, error } = await supabase
         .from('appointments')
-        .update({ is_booked: true, patient_id: patientId })
-        .eq('id', slotId)
-        .eq('is_booked', false); // Ensure the slot is still available
+        .select('id, consultant_id, date, start_time, end_time, is_booked, created_at')
+        .eq('consultant_id', selectedConsultantId)
+        .eq('is_booked', false)
+        .order('date', { ascending: true })
+        .order('start_time', { ascending: true });
+      if (error) {
+        toast.error('Failed to load slots.');
+      } else {
+        setSlots(data || []);
+      }
+      setLoading(false);
+    };
+    fetchSlots();
+  }, [selectedConsultantId]);
 
-      if (error) throw error;
-
-      setSuccess('Appointment booked successfully!');
-      // Remove the booked slot from the list
-      setAvailableSlots(availableSlots.filter((slot) => slot.id !== slotId));
-    } catch (err) {
-      setError(err.message);
-      console.error('Book Appointment Error:', err);
+  // Book a slot
+  const handleBookSlot = async (slotId: string) => {
+    if (!user) {
+      toast.error('Please log in to book an appointment.');
+      return;
     }
+    setLoading(true);
+    const { error } = await supabase
+      .from('appointments')
+      .update({ is_booked: true /*, patient_id: user.id */ })
+      .eq('id', slotId)
+      .eq('is_booked', false);
+    if (error) {
+      toast.error('Failed to book slot.');
+    } else {
+      toast.success('Slot booked successfully!');
+      setSlots(slots.filter(slot => slot.id !== slotId));
+    }
+    setLoading(false);
   };
 
-  if (loading) return <div className="text-center py-10">Loading available slots...</div>;
-  if (error) return <div className="text-center py-10 text-red-500">Error: {error}</div>;
-
   return (
-    <div className="font-sans min-h-screen bg-gray-50 p-5 max-w-6xl mx-auto my-5">
-      <h1 className="text-center text-2xl font-semibold text-gray-800 mb-8">
-        Book an Appointment
-      </h1>
-      {success && (
-        <div className="mb-4 p-4 bg-green-100 text-green-700 rounded-lg">
-          {success}
-        </div>
-      )}
-      {availableSlots.length === 0 ? (
-        <p className="text-center text-gray-600">No available slots at the moment.</p>
-      ) : (
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <h2 className="text-lg font-semibold text-gray-800 mb-4">Available Slots</h2>
-          <ul className="space-y-3">
-            {availableSlots.map((slot) => (
-              <li
-                key={slot.id}
-                className="p-3 bg-gray-50 rounded-lg flex justify-between items-center"
+    <div className="max-w-4xl mx-auto p-4">
+      <h1 className="text-2xl font-bold mb-6">Book an Appointment</h1>
+      <select
+        value={selectedConsultantId || ''}
+        onChange={(e) => setSelectedConsultantId(e.target.value || null)}
+        className="w-full p-2 border rounded-md mb-4"
+      >
+        <option value="">-- Select a Consultant --</option>
+        {consultants.map(consultant => (
+          <option key={consultant.id} value={consultant.id}>
+            {consultant.name} ({consultant.specialty})
+          </option>
+        ))}
+      </select>
+      {selectedConsultantId && (
+        <div>
+          {loading && <p>Loading slots...</p>}
+          {slots.length === 0 && !loading && <p>No available slots.</p>}
+          {slots.map(slot => (
+            <div key={slot.id} className="p-4 border rounded-lg mb-2 flex justify-between">
+              <p>
+                {new Date(`${slot.date}T${slot.start_time}`).toLocaleString()} -{' '}
+                {new Date(`${slot.date}T${slot.end_time}`).toLocaleString()}
+              </p>
+              <button
+                onClick={() => handleBookSlot(slot.id)}
+                disabled={loading}
+                className="text-white bg-green-600 hover:bg-green-700 px-4 py-2 rounded"
               >
-                <div>
-                  <p className="text-gray-800 font-medium">
-                    {new Date(slot.date).toLocaleDateString('en-US', {
-                      month: 'long',
-                      day: 'numeric',
-                      year: 'numeric',
-                    })}{' '}
-                    at{' '}
-                    {new Date(`1970-01-01T${slot.start_time}`).toLocaleTimeString('en-US', {
-                      hour: 'numeric',
-                      minute: 'numeric',
-                      hour12: true,
-                    })}
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    Duration: {slot.start_time} - {slot.end_time}
-                  </p>
-                </div>
-                <button
-                  onClick={() => handleBookAppointment(slot.id)}
-                  className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition"
-                >
-                  Book
-                </button>
-              </li>
-            ))}
-          </ul>
+                Book
+              </button>
+            </div>
+          ))}
         </div>
       )}
     </div>
   );
-};
+}
 
 export default BookAppointment;

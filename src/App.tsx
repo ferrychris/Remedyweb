@@ -1,14 +1,12 @@
-
 import { Routes, Route } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
-import { useState } from 'react';
+
 
 // Public Components
 import Navbar from './components/Navbar';
 import Home from './components/Home';
 import Footer from './components/Footer';
 import { SearchResults } from './components/SearchResults';
-import Sidebar from './Sidebar';
 
 // Remedy Components
 import Remedies from './components/remedycomponents/Remedies';
@@ -44,72 +42,9 @@ import { Orders } from './components/userdashboard/Orders';
 import { Consultations } from './components/userdashboard/Consultations';
 import ConsultantDashboard from './components/consultantsdash/ConsultantDashboard';
 
+
 function App() {
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const isAdminLogin = window.location.pathname === '/adminlogin';
-
-  const toggleSidebar = () => {
-    setIsSidebarOpen(!isSidebarOpen);
-  };
-
   return (
-<<<<<<< HEAD
-    <div className="min-h-screen bg-gray-50 flex">
-      {!isAdminLogin && (
-        <Sidebar isOpen={isSidebarOpen} toggleSidebar={toggleSidebar} />
-      )}
-      <div className="flex-1">
-        <Navbar toggleSidebar={toggleSidebar} />
-        <main
-          className={`container mx-auto px-4 py-8 ${
-            !isAdminLogin && isSidebarOpen ? 'ml-64' : ''
-          }`}
-        >
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/remedies" element={<Remedies />} />
-            <Route path="/remedies/:slug" element={<RemedyDetail />} />
-            <Route path="/ailments" element={<Ailments />} />
-            <Route path="/ailments/:slug" element={<AilmentDetail />} />
-            <Route path="/ndashboard" element={<NewUserDashboard />}>
-              <Route index element={<Overview />} />
-              <Route path="overview" element={<Overview />} />
-              <Route path="consultations" element={<Consultations />} />
-              <Route path="saved-remedies" element={<SavedRemedies />} />
-              <Route path="health-tracking" element={<HealthTracking />} />
-              <Route path="orders" element={<Orders />} />
-            </Route>
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/consult" element={<ConsultDoctor />} />
-            <Route path="/consultant/availability" element={<ManageAvailability />} />
-            <Route path="/consultantDashboard" element={<ConsultantDashboard />} />
-            <Route path="/store" element={<Store />} />
-            <Route path="/store/:slug" element={<ProductDetail />} />
-            <Route path="/adminlogin" element={<AdminLogin />} />
-            <Route path="/admin" element={<AdminPanel />}>
-              <Route index element={<AdminDashboard />} />
-              <Route path="admindashboard" element={<AdminDashboard />} />
-              <Route path="users" element={<UsersManagement />} />
-              <Route path="remedies" element={<RemediesManagement />} />
-              <Route path="ailments" element={<AilmentsManagement />} />
-              <Route path="consultants" element={<ConsultantsManagement />} />
-              <Route path="store" element={<StoreManagement />} />
-              <Route path="comments" element={<div>Comments Management (Coming Soon)</div>} />
-              <Route path="settings" element={<AdminSettings />} />
-            </Route>
-            <Route path="/search" element={<SearchResults />} />
-          </Routes>
-        </main>
-        <Footer />
-        <Toaster position="bottom-right" />
-      </div>
-      {isSidebarOpen && !isAdminLogin && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-40"
-          onClick={toggleSidebar}
-        />
-      )}
-=======
     <div className="min-h-screen bg-gray-50">
       <Navbar />
       <main className="container mx-auto px-4 py-8">
@@ -167,7 +102,6 @@ function App() {
       </main>
       <Footer />
       <Toaster position="bottom-right" />
->>>>>>> 70fa9a48920bff527ba1f6fbe46ba9ac11b6d780
     </div>
   );
 }
