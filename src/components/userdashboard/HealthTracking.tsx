@@ -3,164 +3,139 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/auth';
 import toast from 'react-hot-toast';
 import { Heart, Activity } from 'lucide-react';
-import { Line } from 'react-chartjs-2';
-import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend } from 'chart.js';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { useNavigate } from 'react-router-dom';
 
-// Register Chart.js components
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
-
-interface HealthMetric {
+interface HealthReview {
   id: string;
-  user_id: string;
-  metric_type: string;
-  value: any; // JSONB in Supabase, parsed as object in frontend
-  recorded_at: string;
+  patient_id: string;
+  consultant_id: string;
+  overall_rating: number;
+  mental_rating: number;
+  physical_rating: number;
+  nutrition_rating: number;
+  notes: string;
+  lab_results: any;
+  next_review_date: string;
+  created_at: string;
+}
+
+interface Consultant {
+  id: string;
+  full_name: string;
 }
 
 export function HealthTracking() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [healthMetrics, setHealthMetrics] = useState<HealthMetric[]>([]);
-  const [selectedMetric, setSelectedMetric] = useState<string>('heart_rate');
-  const [newMetric, setNewMetric] = useState<any>({});
-  const [loadingMetrics, setLoadingMetrics] = useState(true);
-  const [insights, setInsights] = useState<string[]>([]);
+  const [reviews, setReviews] = useState<HealthReview[]>([]);
+  const [consultants, setConsultants] = useState<Consultant[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [selectedReview, setSelectedReview] = useState<HealthReview | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [overallRating, setOverallRating] = useState<number | null>(null);
 
   useEffect(() => {
     if (!user) {
       navigate('/login');
       return;
     }
-
-    fetchHealthMetrics();
+    fetchHealthReviews();
+    fetchConsultants();
+    fetchOverallRating();
   }, [user, navigate]);
 
-  // Fetch Health Metrics
-  const fetchHealthMetrics = async () => {
-    if (!user) return;
-
+  const fetchHealthReviews = async () => {
     try {
-      setLoadingMetrics(true);
       const { data, error } = await supabase
-        .from('health_metrics')
+        .from('health_reviews')
         .select('*')
-        .eq('user_id', user.id)
-        .order('recorded_at', { ascending: false })
-        .limit(50); // Limit to last 50 entries for performance
+        .eq('patient_id', user?.id)
+        .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setHealthMetrics(data || []);
-      analyzeHealthData(data || []);
+      setReviews(data || []);
     } catch (error) {
-      toast.error('Failed to load health metrics');
-      console.error('Health metrics error:', error);
+      toast.error('Failed to load health reviews');
+      console.error('Health reviews error:', error);
     } finally {
-      setLoadingMetrics(false);
+      setIsLoading(false);
     }
   };
 
-  // Analyze Health Data for Insights
-  const analyzeHealthData = (metrics: HealthMetric[]) => {
-    const newInsights: string[] = [];
-
-    // Check for high heart rate
-    const heartRates = metrics
-      .filter(m => m.metric_type === 'heart_rate')
-      .map(m => m.value.value)
-      .slice(0, 5); // Last 5 heart rate entries
-
-    if (heartRates.length > 0) {
-      const avgHeartRate = heartRates.reduce((sum, val) => sum + val, 0) / heartRates.length;
-      if (avgHeartRate > 100) {
-        newInsights.push('Your average heart rate is high (>100 bpm). Consider consulting a doctor.');
-      }
-    }
-
-    // Check for low sleep
-    const sleepData = metrics
-      .filter(m => m.metric_type === 'sleep')
-      .map(m => m.value.hours)
-      .slice(0, 5); // Last 5 sleep entries
-
-    if (sleepData.length > 0) {
-      const avgSleep = sleepData.reduce((sum, val) => sum + val, 0) / sleepData.length;
-      if (avgSleep < 6) {
-        newInsights.push('Your average sleep is low (<6 hours). Aim for 7-9 hours per night.');
-      }
-    }
-
-    setInsights(newInsights);
-  };
-
-  // Handle Logging a New Metric
-  const handleLogMetric = async () => {
-    if (!user || !newMetric.value) {
-      toast.error('Please enter a valid value');
-      return;
-    }
-
+  const fetchConsultants = async () => {
     try {
-      const metricData: any = {
-        user_id: user.id,
-        metric_type: selectedMetric,
-        value: {},
-        recorded_at: new Date().toISOString(),
-      };
-
-      // Structure the value based on metric type
-      if (selectedMetric === 'blood_pressure') {
-        metricData.value = {
-          systolic: parseInt(newMetric.systolic) || 0,
-          diastolic: parseInt(newMetric.diastolic) || 0,
-        };
-      } else if (selectedMetric === 'sleep') {
-        metricData.value = { hours: parseFloat(newMetric.hours) || 0 };
-      } else {
-        metricData.value = { value: parseFloat(newMetric.value) || 0 };
-      }
-
-      const { error } = await supabase.from('health_metrics').insert([metricData]);
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('id, full_name')
+        .eq('role', 'consultant');
 
       if (error) throw error;
-toast.success('Health metric logged successfully');
-setNewMetric({});
-fetchHealthMetrics(); // Refresh metrics
+      setConsultants(data || []);
     } catch (error) {
-      toast.error('Failed to log health metric');
-      console.error('Log metric error:', error);
+      console.error('Error fetching consultants:', error);
     }
   };
 
-  // Prepare Chart Data
-  const getChartData = () => {
-    const filteredMetrics = healthMetrics.filter(m => m.metric_type === selectedMetric);
-    const labels = filteredMetrics.map(m => new Date(m.recorded_at).toLocaleDateString());
-    let data: number[] = [];
+  const fetchOverallRating = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('health_reviews')
+        .select('overall_rating, created_at')
+        .eq('patient_id', user?.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
 
-    if (selectedMetric === 'blood_pressure') {
-      data = filteredMetrics.map(m => m.value.systolic); // Show systolic for BP
-    } else if (selectedMetric === 'sleep') {
-      data = filteredMetrics.map(m => m.value.hours);
-    } else {
-      data = filteredMetrics.map(m => m.value.value);
+      if (error) throw error;
+      setOverallRating(data?.overall_rating || null);
+    } catch (error) {
+      console.error('Error fetching overall rating:', error);
     }
-
-    return {
-      labels,
-      datasets: [
-        {
-          label: selectedMetric.replace('_', ' ').toUpperCase(),
-          data,
-          borderColor: 'rgba(75, 192, 192, 1)',
-          backgroundColor: 'rgba(75, 192, 192, 0.2)',
-          fill: true,
-        },
-      ],
-    };
   };
 
-  if (loadingMetrics) {
+  const getConsultantName = (consultantId: string) => {
+    const consultant = consultants.find(c => c.id === consultantId);
+    return consultant?.full_name || 'Unknown Consultant';
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  };
+
+  const getRatingColor = (rating: number) => {
+    if (rating >= 80) return 'text-emerald-500';
+    if (rating >= 60) return 'text-yellow-500';
+    return 'text-red-500';
+  };
+
+  const getRatingLabel = (rating: number) => {
+    if (rating >= 80) return 'Excellent';
+    if (rating >= 60) return 'Good';
+    if (rating >= 40) return 'Fair';
+    return 'Poor';
+  };
+
+  const getRatingEmoji = (rating: number) => {
+    if (rating >= 80) return '⭐️⭐️⭐️⭐️⭐️';
+    if (rating >= 60) return '⭐️⭐️⭐️⭐️';
+    if (rating >= 40) return '⭐️⭐️⭐️';
+    return '⭐️⭐️';
+  };
+
+  const chartData = reviews.map(review => ({
+    date: formatDate(review.created_at),
+    overall: review.overall_rating,
+    mental: review.mental_rating,
+    physical: review.physical_rating,
+    nutrition: review.nutrition_rating
+  }));
+
+  if (isLoading) {
     return (
       <div className="flex justify-center items-center h-64">
         <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-emerald-500"></div>
@@ -172,131 +147,270 @@ fetchHealthMetrics(); // Refresh metrics
     <div className="p-6">
       <h1 className="text-2xl font-bold text-gray-800 mb-6 flex items-center">
         <Heart className="h-6 w-6 mr-2 text-emerald-600" />
-        Health Tracking
+        Health Reviews
       </h1>
 
       <div className="bg-white p-6 rounded-xl shadow-sm">
-        {/* Log New Metric */}
-        <div className="mb-6">
-          <h3 className="text-lg font-semibold text-gray-700 mb-2">Log a New Health Metric</h3>
-          <div className="flex flex-col md:flex-row gap-4">
-            <select
-              value={selectedMetric}
-              onChange={(e) => setSelectedMetric(e.target.value)}
-              className="border p-2 rounded focus:outline-none focus:ring-2 focus:ring-emerald-500"
-            >
-              <option value="heart_rate">Heart Rate (bpm)</option>
-              <option value="blood_pressure">Blood Pressure (mmHg)</option>
-              <option value="steps">Steps</option>
-              <option value="sleep">Sleep (hours)</option>
-              <option value="stress">Stress Level (1-10)</option>
-            </select>
-
-            {selectedMetric === 'blood_pressure' ? (
-              <div className="flex gap-2">
-                <input
-                  type="number"
-                  placeholder="Systolic"
-                  value={newMetric.systolic || ''}
-                  onChange={(e) => setNewMetric({ ...newMetric, systolic: e.target.value })}
-                  className="border p-2 rounded focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                />
-                <input
-                  type="number"
-                  placeholder="Diastolic"
-                  value={newMetric.diastolic || ''}
-                  onChange={(e) => setNewMetric({ ...newMetric, diastolic: e.target.value })}
-                  className="border p-2 rounded focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                />
+        {/* Overall Health Score */}
+        {overallRating !== null && (
+          <div className="mb-8">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4">Your Overall Health Score</h3>
+            <div className="bg-emerald-50 p-6 rounded-lg">
+              <div className="flex flex-col items-center">
+                <div className={`text-5xl font-bold ${getRatingColor(overallRating)} mb-2`}>
+                  {overallRating}%
+                </div>
+                <div className="text-3xl mb-2">{getRatingEmoji(overallRating)}</div>
+                <div className="text-lg text-gray-600">{getRatingLabel(overallRating)}</div>
               </div>
-            ) : selectedMetric === 'sleep' ? (
-              <input
-                type="number"
-                step="0.1"
-                placeholder="Hours slept"
-                value={newMetric.hours || ''}
-                onChange={(e) => setNewMetric({ ...newMetric, hours: e.target.value })}
-                className="border p-2 rounded focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              />
-            ) : (
-              <input
-                type="number"
-                placeholder={`Enter ${selectedMetric.replace('_', ' ')}`}
-                value={newMetric.value || ''}
-                onChange={(e) => setNewMetric({ ...newMetric, value: e.target.value })}
-                className="border p-2 rounded focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              />
-            )}
-
-            <button
-              onClick={handleLogMetric}
-              className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700"
-            >
-              Log Metric
-            </button>
-          </div>
-        </div>
-
-        {/* Insights/Alerts */}
-        {insights.length > 0 && (
-          <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-            <h3 className="text-lg font-semibold text-yellow-800 mb-2">Health Insights</h3>
-            <ul className="list-disc pl-5 text-yellow-700">
-              {insights.map((insight, index) => (
-                <li key={index}>{insight}</li>
-              ))}
-            </ul>
+            </div>
           </div>
         )}
 
-        {/* Health Metrics Chart */}
-        <div>
-          <h3 className="text-lg font-semibold text-gray-700 mb-2">Your Health Trends</h3>
-          <div className="mb-4">
-            <label className="mr-2">Select Metric to View:</label>
-            <select
-              value={selectedMetric}
-              onChange={(e) => setSelectedMetric(e.target.value)}
-              className="border p-2 rounded focus:outline-none focus:ring-2 focus:ring-emerald-500"
-            >
-              <option value="heart_rate">Heart Rate</option>
-              <option value="blood_pressure">Blood Pressure</option>
-              <option value="steps">Steps</option>
-              <option value="sleep">Sleep</option>
-              <option value="stress">Stress</option>
-            </select>
-          </div>
-
-          {healthMetrics.filter(m => m.metric_type === selectedMetric).length === 0 ? (
-            <p className="text-gray-600">No data available for this metric.</p>
-          ) : (
-            <div className="h-64">
-              <Line
-                data={getChartData()}
-                options={{
-                  responsive: true,
-                  maintainAspectRatio: false,
-                  scales: {
-                    y: {
-                      beginAtZero: true,
-                      title: {
-                        display: true,
-                        text: selectedMetric === 'blood_pressure' ? 'mmHg' : selectedMetric === 'sleep' ? 'Hours' : selectedMetric === 'steps' ? 'Steps' : 'Value',
-                      },
-                    },
-                    x: {
-                      title: {
-                        display: true,
-                        text: 'Date',
-                      },
-                    },
-                  },
-                }}
-              />
+        {/* Current Health Status */}
+        {reviews.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <div className="bg-white p-6 rounded-lg shadow-sm">
+              <h3 className="text-lg font-semibold text-gray-800 mb-2">Overall Health</h3>
+              <div className="flex flex-col items-center">
+                <div className={`text-4xl font-bold ${getRatingColor(reviews[0].overall_rating)} mb-2`}>
+                  {reviews[0].overall_rating}%
+                </div>
+                <div className="text-2xl mb-1">{getRatingEmoji(reviews[0].overall_rating)}</div>
+                <div className="text-sm text-gray-500">{getRatingLabel(reviews[0].overall_rating)}</div>
+              </div>
             </div>
-          )}
+            <div className="bg-white p-6 rounded-lg shadow-sm">
+              <h3 className="text-lg font-semibold text-gray-800 mb-2">Mental Health</h3>
+              <div className="flex flex-col items-center">
+                <div className={`text-4xl font-bold ${getRatingColor(reviews[0].mental_rating)} mb-2`}>
+                  {reviews[0].mental_rating}%
+                </div>
+                <div className="text-2xl mb-1">{getRatingEmoji(reviews[0].mental_rating)}</div>
+                <div className="text-sm text-gray-500">{getRatingLabel(reviews[0].mental_rating)}</div>
+              </div>
+            </div>
+            <div className="bg-white p-6 rounded-lg shadow-sm">
+              <h3 className="text-lg font-semibold text-gray-800 mb-2">Physical Health</h3>
+              <div className="flex flex-col items-center">
+                <div className={`text-4xl font-bold ${getRatingColor(reviews[0].physical_rating)} mb-2`}>
+                  {reviews[0].physical_rating}%
+                </div>
+                <div className="text-2xl mb-1">{getRatingEmoji(reviews[0].physical_rating)}</div>
+                <div className="text-sm text-gray-500">{getRatingLabel(reviews[0].physical_rating)}</div>
+              </div>
+            </div>
+            <div className="bg-white p-6 rounded-lg shadow-sm">
+              <h3 className="text-lg font-semibold text-gray-800 mb-2">Nutrition</h3>
+              <div className="flex flex-col items-center">
+                <div className={`text-4xl font-bold ${getRatingColor(reviews[0].nutrition_rating)} mb-2`}>
+                  {reviews[0].nutrition_rating}%
+                </div>
+                <div className="text-2xl mb-1">{getRatingEmoji(reviews[0].nutrition_rating)}</div>
+                <div className="text-sm text-gray-500">{getRatingLabel(reviews[0].nutrition_rating)}</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Health Progress Chart */}
+        <div className="mb-8">
+          <h3 className="text-lg font-semibold text-gray-700 mb-4">Rating History</h3>
+          <div className="h-80">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="date" />
+                <YAxis domain={[0, 100]} />
+                <Tooltip 
+                  formatter={(value: number) => [`${value}%`, 'Rating']}
+                  labelFormatter={(label) => `Date: ${label}`}
+                />
+                <Legend />
+                <Line type="monotone" dataKey="overall" stroke="#10B981" name="Overall" />
+                <Line type="monotone" dataKey="mental" stroke="#6366F1" name="Mental" />
+                <Line type="monotone" dataKey="physical" stroke="#F59E0B" name="Physical" />
+                <Line type="monotone" dataKey="nutrition" stroke="#EC4899" name="Nutrition" />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Recent Reviews */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {reviews.map((review) => (
+            <div 
+              key={review.id}
+              className="bg-white p-6 rounded-lg shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+              onClick={() => {
+                setSelectedReview(review);
+                setIsModalOpen(true);
+              }}
+            >
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-800">
+                    {formatDate(review.created_at)}
+                  </h3>
+                  <p className="text-sm text-gray-600">
+                    {getConsultantName(review.consultant_id)}
+                  </p>
+                </div>
+                <div className="flex flex-col items-end">
+                  <div className={`text-3xl font-bold ${getRatingColor(review.overall_rating)}`}>
+                    {review.overall_rating}%
+                  </div>
+                  <div className="text-xl mb-1">{getRatingEmoji(review.overall_rating)}</div>
+                  <span className="text-sm text-gray-500">{getRatingLabel(review.overall_rating)}</span>
+                </div>
+              </div>
+              
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-600">Mental Health</span>
+                  <div className="flex items-center">
+                    <span className={`font-medium ${getRatingColor(review.mental_rating)} mr-2`}>
+                      {review.mental_rating}%
+                    </span>
+                    <span className="text-sm mr-2">{getRatingEmoji(review.mental_rating)}</span>
+                    <div className="w-16 h-2 bg-gray-200 rounded-full">
+                      <div 
+                        className={`h-full rounded-full ${getRatingColor(review.mental_rating).replace('text', 'bg')}`}
+                        style={{ width: `${review.mental_rating}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-600">Physical Health</span>
+                  <div className="flex items-center">
+                    <span className={`font-medium ${getRatingColor(review.physical_rating)} mr-2`}>
+                      {review.physical_rating}%
+                    </span>
+                    <span className="text-sm mr-2">{getRatingEmoji(review.physical_rating)}</span>
+                    <div className="w-16 h-2 bg-gray-200 rounded-full">
+                      <div 
+                        className={`h-full rounded-full ${getRatingColor(review.physical_rating).replace('text', 'bg')}`}
+                        style={{ width: `${review.physical_rating}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-600">Nutrition</span>
+                  <div className="flex items-center">
+                    <span className={`font-medium ${getRatingColor(review.nutrition_rating)} mr-2`}>
+                      {review.nutrition_rating}%
+                    </span>
+                    <span className="text-sm mr-2">{getRatingEmoji(review.nutrition_rating)}</span>
+                    <div className="w-16 h-2 bg-gray-200 rounded-full">
+                      <div 
+                        className={`h-full rounded-full ${getRatingColor(review.nutrition_rating).replace('text', 'bg')}`}
+                        style={{ width: `${review.nutrition_rating}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
+
+      {/* Review Details Modal */}
+      {selectedReview && isModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg p-6 max-w-2xl w-full">
+            <div className="flex justify-between items-start mb-4">
+              <h2 className="text-2xl font-bold text-gray-800">
+                Health Review Details
+              </h2>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-800 mb-2">
+                  Consultation Details
+                </h3>
+                <p className="text-gray-600">
+                  Date: {formatDate(selectedReview.created_at)}
+                </p>
+                <p className="text-gray-600">
+                  Consultant: {getConsultantName(selectedReview.consultant_id)}
+                </p>
+              </div>
+
+              <div>
+                <h3 className="text-lg font-semibold text-gray-800 mb-2">
+                  Health Ratings
+                </h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <p className="text-gray-600">Overall Health</p>
+                    <p className={`text-3xl font-bold ${getRatingColor(selectedReview.overall_rating)}`}>
+                      {selectedReview.overall_rating}%
+                    </p>
+                    <p className="text-xl mb-1">{getRatingEmoji(selectedReview.overall_rating)}</p>
+                    <p className="text-sm text-gray-500">{getRatingLabel(selectedReview.overall_rating)}</p>
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <p className="text-gray-600">Mental Health</p>
+                    <p className={`text-3xl font-bold ${getRatingColor(selectedReview.mental_rating)}`}>
+                      {selectedReview.mental_rating}%
+                    </p>
+                    <p className="text-xl mb-1">{getRatingEmoji(selectedReview.mental_rating)}</p>
+                    <p className="text-sm text-gray-500">{getRatingLabel(selectedReview.mental_rating)}</p>
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <p className="text-gray-600">Physical Health</p>
+                    <p className={`text-3xl font-bold ${getRatingColor(selectedReview.physical_rating)}`}>
+                      {selectedReview.physical_rating}%
+                    </p>
+                    <p className="text-xl mb-1">{getRatingEmoji(selectedReview.physical_rating)}</p>
+                    <p className="text-sm text-gray-500">{getRatingLabel(selectedReview.physical_rating)}</p>
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <p className="text-gray-600">Nutrition</p>
+                    <p className={`text-3xl font-bold ${getRatingColor(selectedReview.nutrition_rating)}`}>
+                      {selectedReview.nutrition_rating}%
+                    </p>
+                    <p className="text-xl mb-1">{getRatingEmoji(selectedReview.nutrition_rating)}</p>
+                    <p className="text-sm text-gray-500">{getRatingLabel(selectedReview.nutrition_rating)}</p>
+                  </div>
+                </div>
+              </div>
+
+              {selectedReview.notes && (
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-2">
+                    Notes
+                  </h3>
+                  <p className="text-gray-600 whitespace-pre-wrap">
+                    {selectedReview.notes}
+                  </p>
+                </div>
+              )}
+
+              {selectedReview.next_review_date && (
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-2">
+                    Next Review
+                  </h3>
+                  <p className="text-gray-600">
+                    {formatDate(selectedReview.next_review_date)}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

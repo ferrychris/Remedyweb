@@ -1,103 +1,181 @@
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
-
+import { useState, useEffect } from 'react';
+import { supabase } from './lib/supabase';
+import { User } from '@supabase/supabase-js';
 
 // Public Components
 import Navbar from './components/Navbar';
 import Home from './components/Home';
 import Footer from './components/Footer';
-import { SearchResults } from './components/SearchResults';
-
-// Remedy Components
-import Remedies from './components/remedycomponents/Remedies';
-import RemedyDetail from './components/remedycomponents/RemedyDetail';
 import Ailments from './components/Ailments';
-import AilmentDetail from './components/AilmentDetail';
+import Remedies from './components/remedycomponents/Remedies';
 
-// User Components
-import ConsultDoctor from './components/ConsultDoctor';
-import { Dashboard } from './components/userdashboard/Dashboard';
-import ManageAvailability from './components/consultantsdash/ManageAvailability';
+// User Dashboard Components
 import { NewUserDashboard } from './components/userdashboard/newuserdashboard';
 import { Overview } from './components/userdashboard/Overview';
 import SavedRemedies from './components/userdashboard/SavedRemedies';
-
-// Store Components
-import { Store } from './components/storecomponents/Store';
-import ProductDetail from './components/storecomponents/ProductDetail';
-import Checkout from './components/storecomponents/Checkout';
+import HealthMetrics from './components/userdashboard/HealthMetrics';
+import { Settings } from './components/userdashboard/Settings';
 
 // Admin Components
 import { AdminDashboard } from './components/admincomponents/AdminDashboard';
-import AdminPanel from './components/admincomponents/AdminPanel';
-import { AdminLogin } from './components/admincomponents/AdminLogin';
-import { RemediesManagement } from './components/admincomponents/RemediesManagement';
-import { AilmentsManagement } from './components/admincomponents/AilmentsManagement';
-import { StoreManagement } from './components/admincomponents/StoreManagement';
 import { UsersManagement } from './components/admincomponents/UsersManagement';
-import { ConsultantsManagement } from './components/admincomponents/ConsultantsManagement';
 import { AdminSettings } from './components/admincomponents/AdminSettings';
-import { HealthTracking } from './components/userdashboard/HealthTracking';
-import { Orders } from './components/userdashboard/Orders';
-import { Consultations } from './components/userdashboard/Consultations';
-import ConsultantDashboard from './components/consultantsdash/ConsultantDashboard';
-
 
 function App() {
+  const [user, setUser] = useState<User | null>(null);
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
+  const [userRole, setUserRole] = useState<'patient' | 'consultant' | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const toggleSidebar = () => {
+    setSidebarOpen(!sidebarOpen);
+  };
+
+  useEffect(() => {
+    let mounted = true;
+
+    const checkUser = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (!mounted) return;
+        
+        setUser(session?.user ?? null);
+
+        if (session?.user) {
+          const { data: profile, error } = await supabase
+            .from('user_profiles')
+            .select('is_admin, role')
+            .eq('id', session.user.id)
+            .single();
+
+          if (error) {
+            console.error('Error fetching user profile:', error);
+            return;
+          }
+
+          if (mounted) {
+            setIsAdmin(profile?.is_admin || false);
+            setUserRole(profile?.role || null);
+          }
+        }
+      } catch (error) {
+        console.error('Error checking user:', error);
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    checkUser();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!mounted) return;
+
+      setUser(session?.user ?? null);
+      
+      if (session?.user) {
+        const { data: profile, error } = await supabase
+          .from('user_profiles')
+          .select('is_admin, role')
+          .eq('id', session.user.id)
+          .single();
+
+        if (error) {
+          console.error('Error fetching user profile:', error);
+          return;
+        }
+
+        if (mounted) {
+          setIsAdmin(profile?.is_admin || false);
+          setUserRole(profile?.role || null);
+        }
+      } else {
+        setIsAdmin(false);
+        setUserRole(null);
+      }
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  // Protected route wrapper component
+  const ProtectedRoute = ({ children, requireAdmin, requireRole }: { 
+    children: React.ReactNode;
+    requireAdmin?: boolean;
+    requireRole?: 'patient' | 'consultant';
+  }) => {
+    if (loading) {
+      return (
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="animate-spin h-8 w-8 border-t-2 border-emerald-500 rounded-full"></div>
+        </div>
+      );
+    }
+
+    if (!user) {
+      return <Navigate to="/" />;
+    }
+
+    if (requireAdmin && !isAdmin) {
+      return <Navigate to="/" />;
+    }
+
+    if (requireRole && userRole !== requireRole) {
+      return <Navigate to="/" />;
+    }
+
+    return <>{children}</>;
+  };
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Navbar />
-      <main className="container mx-auto px-4 py-8">
+    <div className="min-h-screen flex flex-col">
+      <Navbar toggleSidebar={toggleSidebar} />
+      <main className="flex-grow">
         <Routes>
+          {/* Public Routes */}
           <Route path="/" element={<Home />} />
-          
-          {/* Remedy Routes */}
-          <Route path="/remedies" element={<Remedies />} />
-          <Route path="/remedies/:slug" element={<RemedyDetail />} />
           <Route path="/ailments" element={<Ailments />} />
-          <Route path="/ailments/:slug" element={<AilmentDetail />} />
-          
-          {/* New User Dashboard Routes (Nested) */}
-          <Route path="/ndashboard" element={<NewUserDashboard />}>
-            <Route index element={<Overview />} /> {/* Default view */}
-            <Route path="overview" element={<Overview/>} />
-            <Route path="consultations" element={<Consultations/>} />
+          <Route path="/remedies" element={<Remedies />} />
+
+          {/* Protected User Dashboard Routes */}
+          <Route 
+            path="/dashboard" 
+            element={
+              <ProtectedRoute requireRole="patient">
+                <NewUserDashboard />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<Overview />} />
+            <Route path="health-metrics" element={<HealthMetrics />} />
             <Route path="saved-remedies" element={<SavedRemedies />} />
-            <Route path="health-tracking" element={<HealthTracking />} />
-            <Route path="orders" element={<Orders />} />
+            <Route path="settings" element={<Settings />} />
           </Route>
-          
-          {/* Old User Dashboard Route (keep or remove as needed) */}
-          <Route path="/dashboard" element={<Dashboard />} />
-          
-          {/* Other User Routes */}
-          <Route path="/consult" element={<ConsultDoctor />} />
-          <Route path="/consultant/availability" element={<ManageAvailability />} />
 
-          {/* Consultants route */}
-          <Route path="/consultantDashboard" element={< ConsultantDashboard/>} />
-
-          {/* Store Routes */}
-          <Route path="/store" element={<Store />} />
-          <Route path="/store/:slug" element={<ProductDetail />} />
-          <Route path="/store/checkout" element={<Checkout />} />
-          
-          {/* Admin Routes */}
-          <Route path="/adminlogin" element={<AdminLogin />} />
-          <Route path="/admin" element={<AdminPanel />}>
-            <Route index element={<AdminDashboard />} />
-            <Route path="admindashboard" element={<AdminDashboard/>} />
+          {/* Protected Admin Dashboard Routes */}
+          <Route 
+            path="/admin-dashboard" 
+            element={
+              <ProtectedRoute requireAdmin>
+                <AdminDashboard />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<UsersManagement />} />
             <Route path="users" element={<UsersManagement />} />
-            <Route path="remedies" element={<RemediesManagement/>} />
-            <Route path="ailments" element={<AilmentsManagement/>} />
-            <Route path="consultants" element={<ConsultantsManagement />} />
-            <Route path="store" element={<StoreManagement/>} />
-            <Route path="comments" element={<div>Comments Management (Coming Soon)</div>} />
-            <Route path="settings" element={<AdminSettings/>} />
+            <Route path="settings" element={<AdminSettings />} />
           </Route>
-          
-          {/* Search Route */}
-          <Route path="/search" element={<SearchResults />} />
+
+          {/* Catch all route */}
+          <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </main>
       <Footer />

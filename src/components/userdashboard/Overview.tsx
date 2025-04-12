@@ -20,39 +20,41 @@ interface Consultation {
   };
 }
 
-interface HealthMetric {
+interface HealthReview {
   id: number;
-  metric: string;
-  value: string;
-  recorded_at: string;
+  overall_rating: number;
+  created_at: string;
 }
 
 interface Order {
   id: number;
   created_at: string;
   status: string;
-  total: number;
-  items: number;
+  total_amount: number;
+  items_count: number;
 }
 
 interface SavedRemedy {
   id: number;
-  name: string;
-  saved_at: string;
-  ailment: string;
+  title: string;
+  created_at: string;
+  ailment: {
+    id: number;
+    title: string;
+  };
 }
 
 export function Overview() {
   const { user, profile } = useAuth();
   const [consultations, setConsultations] = useState<Consultation[]>([]);
-  const [healthMetrics, setHealthMetrics] = useState<HealthMetric[]>([]);
+  const [healthReview, setHealthReview] = useState<HealthReview | null>(null);
   const [savedRemedies, setSavedRemedies] = useState<SavedRemedy[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     totalConsultations: 0,
     savedRemedies: 0,
-    healthScore: 85,
+    healthScore: 0,
     totalOrders: 0
   });
 
@@ -105,37 +107,48 @@ export function Overview() {
         
         setConsultations(processedConsultations);
 
-        // Fetch recent health metrics
-        const { data: healthData, error: healthError } = await supabase
-          .from('health_tracking')
-          .select('id, metric, value, recorded_at')
+        // Fetch latest health review
+        const { data: healthReviewData, error: healthReviewError } = await supabase
+          .from('health_reviews')
+          .select('id, overall_rating, created_at')
+          .eq('patient_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (healthReviewError) throw healthReviewError;
+        setHealthReview(healthReviewData?.[0] || null);
+
+        // Fetch saved remedies
+        const { data: remediesData, error: remediesError } = await supabase
+          .from('remedies')
+          .select('id, title, created_at, ailment:ailments(id, title)')
           .eq('user_id', user.id)
-          .order('recorded_at', { ascending: false })
+          .order('created_at', { ascending: false })
           .limit(3);
 
-        if (healthError) throw healthError;
-        setHealthMetrics(healthData || []);
+        if (remediesError) throw remediesError;
+        setSavedRemedies(remediesData?.map(remedy => ({
+          ...remedy,
+          ailment: remedy.ailment?.[0] || { id: 0, title: 'Unknown Ailment' }
+        })) || []);
         
-        // For demo purposes - in a real app we would fetch these from the database
-        // Simulating saved remedies data
-        setSavedRemedies([
-          { id: 1, name: 'Turmeric Tea', saved_at: '2023-05-15T10:30:00', ailment: 'Inflammation' },
-          { id: 2, name: 'Ginger Compress', saved_at: '2023-05-10T14:45:00', ailment: 'Joint Pain' },
-          { id: 3, name: 'Lavender Oil', saved_at: '2023-05-05T09:15:00', ailment: 'Sleep Issues' }
-        ]);
-        
-        // Simulating orders data
-        setOrders([
-          { id: 101, created_at: '2023-05-12T11:30:00', status: 'Delivered', total: 35.99, items: 2 },
-          { id: 102, created_at: '2023-04-28T15:20:00', status: 'Processing', total: 42.50, items: 3 }
-        ]);
+        // Fetch recent orders
+        const { data: ordersData, error: ordersError } = await supabase
+          .from('orders')
+          .select('id, created_at, status, total_amount, items_count')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(3);
+
+        if (ordersError) throw ordersError;
+        setOrders(ordersData || []);
         
         // Set stats
         setStats({
-          totalConsultations: 5,
-          savedRemedies: 12,
-          healthScore: 85,
-          totalOrders: 4
+          totalConsultations: consultationsData?.length || 0,
+          savedRemedies: remediesData?.length || 0,
+          healthScore: healthReviewData?.[0]?.overall_rating || 0,
+          totalOrders: ordersData?.length || 0
         });
       } catch (error) {
         toast.error('Failed to load overview data');
@@ -147,6 +160,19 @@ export function Overview() {
 
     fetchData();
   }, [user]);
+
+  const getRatingColor = (rating: number) => {
+    if (rating >= 80) return 'text-emerald-500';
+    if (rating >= 60) return 'text-yellow-500';
+    return 'text-red-500';
+  };
+
+  const getRatingLabel = (rating: number) => {
+    if (rating >= 80) return 'Excellent';
+    if (rating >= 60) return 'Good';
+    if (rating >= 40) return 'Fair';
+    return 'Poor';
+  };
 
   if (loading) {
     return (
@@ -193,7 +219,16 @@ export function Overview() {
             </div>
             <div>
               <p className="text-sm text-gray-600">Health Score</p>
-              <p className="text-2xl font-bold text-gray-800">{stats.healthScore}/100</p>
+              {healthReview ? (
+                <div className="flex flex-col">
+                  <p className={`text-2xl font-bold ${getRatingColor(healthReview.overall_rating)}`}>
+                    {healthReview.overall_rating}%
+                  </p>
+                  <p className="text-xs text-gray-500">{getRatingLabel(healthReview.overall_rating)}</p>
+                </div>
+              ) : (
+                <p className="text-2xl font-bold text-gray-800">N/A</p>
+              )}
             </div>
           </div>
         </div>
@@ -298,10 +333,10 @@ export function Overview() {
                     <Heart className="h-5 w-5 text-blue-600" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-medium text-gray-900">{remedy.name}</h3>
-                    <p className="text-xs text-gray-500 mt-1">For: {remedy.ailment}</p>
+                    <h3 className="text-sm font-medium text-gray-900">{remedy.title}</h3>
+                    <p className="text-xs text-gray-500 mt-1">For: {remedy.ailment.title}</p>
                     <p className="text-xs text-gray-500">
-                      Saved: {new Date(remedy.saved_at).toLocaleDateString()}
+                      Saved: {new Date(remedy.created_at).toLocaleDateString()}
                     </p>
                   </div>
                 </div>
@@ -345,7 +380,7 @@ export function Overview() {
                     <tr key={order.id}>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-medium text-gray-900">#{order.id}</div>
-                        <div className="text-xs text-gray-500">{order.items} items</div>
+                        <div className="text-xs text-gray-500">{order.items_count} items</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-500">
@@ -355,16 +390,18 @@ export function Overview() {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span 
                           className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                            order.status === 'Delivered' 
+                            order.status === 'completed' 
                               ? 'bg-green-100 text-green-800' 
-                              : 'bg-yellow-100 text-yellow-800'
+                              : order.status === 'processing'
+                              ? 'bg-yellow-100 text-yellow-800'
+                              : 'bg-gray-100 text-gray-800'
                           }`}
                         >
                           {order.status}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        ${order.total.toFixed(2)}
+                        ${order.total_amount.toFixed(2)}
                       </td>
                     </tr>
                   ))}
@@ -383,27 +420,25 @@ export function Overview() {
             </button>
           </div>
           
-          {healthMetrics.length === 0 ? (
-            <p className="text-gray-500">No health metrics recorded.</p>
-          ) : (
+          {healthReview ? (
             <div className="space-y-4">
-              {healthMetrics.map((metric) => (
-                <div key={metric.id} className="flex items-start border-b border-gray-100 pb-4 last:border-0 last:pb-0">
-                  <div className="p-2 rounded-full bg-purple-100 mr-4">
-                    <Activity className="h-5 w-5 text-purple-600" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-900">
-                      {metric.metric.replace('_', ' ')}
-                    </h3>
-                    <p className="text-xs text-gray-900 font-medium mt-1">Value: {metric.value}</p>
-                    <p className="text-xs text-gray-500">
-                      Recorded: {new Date(metric.recorded_at).toLocaleDateString()}
-                    </p>
-                  </div>
+              <div className="flex items-start border-b border-gray-100 pb-4 last:border-0 last:pb-0">
+                <div className="p-2 rounded-full bg-purple-100 mr-4">
+                  <Activity className="h-5 w-5 text-purple-600" />
                 </div>
-              ))}
+                <div>
+                  <h3 className="text-sm font-medium text-gray-900">
+                    Overall Rating
+                  </h3>
+                  <p className="text-xs text-gray-900 font-medium mt-1">Value: {healthReview.overall_rating}%</p>
+                  <p className="text-xs text-gray-500">
+                    Recorded: {new Date(healthReview.created_at).toLocaleDateString()}
+                  </p>
+                </div>
+              </div>
             </div>
+          ) : (
+            <p className="text-gray-500">No health metrics recorded.</p>
           )}
         </div>
       </div>

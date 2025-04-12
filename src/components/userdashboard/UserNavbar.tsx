@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Bell, Search, Menu, X, ShoppingCart, MessageSquare } from 'lucide-react';
+import { Search, Menu, X, ShoppingCart } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
 import { Link } from 'react-router-dom';
 import { getCartItems, getCartTotal, getCartCount, CartItem } from '../../lib/cart';
@@ -11,7 +11,6 @@ interface UserNavbarProps {
 
 const UserNavbar: React.FC<UserNavbarProps> = ({ toggleSidebar, sidebarVisible }) => {
   const { user, profile } = useAuth();
-  const [showNotifications, setShowNotifications] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [showCart, setShowCart] = useState(false);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
@@ -19,7 +18,6 @@ const UserNavbar: React.FC<UserNavbarProps> = ({ toggleSidebar, sidebarVisible }
   
   // Refs for dropdown positioning
   const cartRef = useRef<HTMLDivElement>(null);
-  const notificationsRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
   
   // Close dropdowns when clicking outside
@@ -27,9 +25,6 @@ const UserNavbar: React.FC<UserNavbarProps> = ({ toggleSidebar, sidebarVisible }
     function handleClickOutside(event: MouseEvent) {
       if (cartRef.current && !cartRef.current.contains(event.target as Node)) {
         setShowCart(false);
-      }
-      if (notificationsRef.current && !notificationsRef.current.contains(event.target as Node)) {
-        setShowNotifications(false);
       }
       if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
         setShowProfile(false);
@@ -95,13 +90,12 @@ const UserNavbar: React.FC<UserNavbarProps> = ({ toggleSidebar, sidebarVisible }
         </div>
       </div>
       
-      {/* Right side - Notifications, Cart, and Profile */}
+      {/* Right side - Cart and Profile */}
       <div className="flex items-center space-x-1 sm:space-x-2">
         <div className="relative" ref={cartRef}>
           <button 
             onClick={() => {
               setShowCart(!showCart);
-              setShowNotifications(false);
               setShowProfile(false);
             }}
             className="p-1.5 sm:p-2 relative rounded-md text-gray-500 hover:bg-gray-100 focus:outline-none"
@@ -166,68 +160,11 @@ const UserNavbar: React.FC<UserNavbarProps> = ({ toggleSidebar, sidebarVisible }
           )}
         </div>
         
-        <button className="p-1.5 sm:p-2 relative rounded-md text-gray-500 hover:bg-gray-100 focus:outline-none">
-          <MessageSquare className="h-5 w-5" />
-          <span className="absolute -top-1 -right-1 h-4 w-4 sm:h-5 sm:w-5 bg-emerald-500 rounded-full flex items-center justify-center text-white text-xs">2</span>
-        </button>
-        
-        <div className="relative" ref={notificationsRef}>
-          <button 
-            onClick={() => {
-              setShowNotifications(!showNotifications);
-              setShowCart(false);
-              setShowProfile(false);
-            }}
-            className="p-1.5 sm:p-2 relative rounded-md text-gray-500 hover:bg-gray-100 focus:outline-none"
-            aria-label="Notifications"
-          >
-            <Bell className="h-5 w-5" />
-            <span className="absolute -top-1 -right-1 h-2 w-2 bg-red-500 rounded-full"></span>
-          </button>
-          
-          {showNotifications && (
-            <div className="absolute right-0 mt-2 w-screen sm:w-80 bg-white rounded-md shadow-lg overflow-hidden z-50 max-h-[calc(100vh-4rem)] sm:max-h-[80vh] fixed sm:relative left-0 sm:left-auto bottom-0 sm:bottom-auto">
-              <div className="p-3 border-b border-gray-200 flex justify-between items-center">
-                <h3 className="text-sm font-medium text-gray-900">Notifications</h3>
-                <button 
-                  onClick={() => setShowNotifications(false)}
-                  className="text-gray-400 hover:text-gray-500 sm:hidden"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-              <div className="overflow-y-auto" style={{ maxHeight: "calc(100vh - 12rem)" }}>
-                <div className="p-3 border-b border-gray-100 hover:bg-gray-50">
-                  <p className="text-sm font-medium text-gray-900">Consultation reminder</p>
-                  <p className="text-xs text-gray-500 mt-1">Your consultation with Dr. Smith is in 2 hours</p>
-                  <p className="text-xs text-gray-400 mt-1">10 minutes ago</p>
-                </div>
-                <div className="p-3 border-b border-gray-100 hover:bg-gray-50">
-                  <p className="text-sm font-medium text-gray-900">Order shipped</p>
-                  <p className="text-xs text-gray-500 mt-1">Your order #1234 has been shipped</p>
-                  <p className="text-xs text-gray-400 mt-1">2 hours ago</p>
-                </div>
-                <div className="p-3 hover:bg-gray-50">
-                  <p className="text-sm font-medium text-gray-900">Health tip</p>
-                  <p className="text-xs text-gray-500 mt-1">Don't forget to take your daily herbs</p>
-                  <p className="text-xs text-gray-400 mt-1">Yesterday</p>
-                </div>
-              </div>
-              <div className="p-2 border-t border-gray-200 text-center">
-                <button className="text-xs text-emerald-600 hover:text-emerald-700 font-medium">
-                  View all notifications
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-        
         <div className="relative" ref={profileRef}>
           <button 
             onClick={() => {
               setShowProfile(!showProfile);
               setShowCart(false);
-              setShowNotifications(false);
             }}
             className="flex items-center"
             aria-label="User profile"
