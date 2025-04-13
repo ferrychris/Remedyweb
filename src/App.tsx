@@ -22,6 +22,9 @@ import RemedyDetail from './components/remedycomponents/RemedyDetail';
 import SubmitRemedy from './components/remedycomponents/SubmitRemedy';
 import AppointmentManager from './components/consultantsdash/AppointmentManager';
 import SetAvailability from './components/consultantdashboard/Setavailability';
+import PricingManager from './components/consultantsdash/PricingManager';
+import BookingManager from './components/consultantsdash/BookingManager';
+
 function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
@@ -83,6 +86,8 @@ function App() {
           <Route path="appointments" element={<Appointments />} />
           <Route path="messages" element={<Messages />} />
           <Route path="settings" element={<ConsultantSettings />} />
+          <Route path="pricing" element={<PricingManager />} />
+          <Route path="booking" element={<BookingManager />} />
           <Route path="set-availability" element={<SetAvailability />} />
           <Route path="appointmentmanager" element={<AppointmentManager />} />
         </Route>

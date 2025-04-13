@@ -71,6 +71,20 @@ export default function SetAvailability() {
         }
     };
 
+    // Add a refresh function to manually refresh slots
+    const refreshSlots = () => {
+        fetchAvailabilitySlots();
+    };
+
+    // Add useEffect to refresh slots periodically
+    useEffect(() => {
+        const interval = setInterval(() => {
+            refreshSlots();
+        }, 30000); // Refresh every 30 seconds
+
+        return () => clearInterval(interval);
+    }, [user]);
+
     const handleAddSlot = async () => {
         if (!user || !newSlot.date || !newSlot.start_time || !newSlot.end_time) {
             toast.error('Please fill in all fields');
@@ -146,7 +160,15 @@ export default function SetAvailability() {
 
     return (
         <div className="max-w-4xl mx-auto p-6">
-            <h1 className="text-2xl font-bold text-gray-800 mb-6">Set Your Availability</h1>
+            <div className="flex justify-between items-center mb-6">
+                <h1 className="text-2xl font-bold text-gray-800">Set Your Availability</h1>
+                <button
+                    onClick={refreshSlots}
+                    className="px-3 py-1 text-sm bg-gray-100 text-gray-600 rounded-md hover:bg-gray-200"
+                >
+                    Refresh
+                </button>
+            </div>
             
             <div className="bg-white rounded-lg shadow-md p-6 mb-6">
                 <h2 className="text-lg font-semibold text-gray-700 mb-4">Add New Availability Slot</h2>
@@ -202,24 +224,36 @@ export default function SetAvailability() {
                     </div>
                 ) : (
                     <div className="space-y-4">
-                        {slots.map((slot) => (
-                            <div key={slot.id} className="border rounded-lg p-4 flex justify-between items-center">
+                        {slots.map(slot => (
+                            <div 
+                                key={slot.id} 
+                                className={`border rounded-lg p-4 flex justify-between items-center ${
+                                    slot.is_booked ? 'bg-gray-50' : 'bg-white'
+                                }`}
+                            >
                                 <div className="flex items-center space-x-4">
-                                    <Calendar className="h-5 w-5 text-emerald-600" />
+                                    <Calendar className={`h-5 w-5 ${slot.is_booked ? 'text-gray-400' : 'text-emerald-600'}`} />
                                     <div>
                                         <p className="font-medium text-gray-800">{formatDate(slot.start_time)}</p>
                                         <p className="text-sm text-gray-500">
                                             <Clock className="h-4 w-4 inline-block mr-1" />
                                             {formatTime(slot.start_time)} - {formatTime(slot.end_time)}
                                         </p>
+                                        {slot.is_booked && (
+                                            <span className="inline-block mt-1 px-2 py-1 text-xs font-medium bg-gray-100 text-gray-600 rounded">
+                                                Booked
+                                            </span>
+                                        )}
                                     </div>
                                 </div>
-                                <button
-                                    onClick={() => slot.id && handleDeleteSlot(slot.id)}
-                                    className="text-red-600 hover:text-red-800 p-2 rounded-full hover:bg-red-50"
-                                >
-                                    <Trash2 className="h-5 w-5" />
-                                </button>
+                                {!slot.is_booked && (
+                                    <button
+                                        onClick={() => slot.id && handleDeleteSlot(slot.id)}
+                                        className="text-red-600 hover:text-red-800 p-2 rounded-full hover:bg-red-50"
+                                    >
+                                        <Trash2 className="h-5 w-5" />
+                                    </button>
+                                )}
                             </div>
                         ))}
                     </div>
