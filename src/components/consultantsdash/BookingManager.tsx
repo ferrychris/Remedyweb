@@ -4,16 +4,29 @@ import { useAuth } from '../../lib/auth';
 import toast from 'react-hot-toast';
 import { Calendar, Clock, User } from 'lucide-react';
 
+// Define the data structures based on the actual Supabase response
+interface UserData {
+  name: string;
+  email: string;
+}
+
+interface RawBooking {
+  id: string;
+  user_id: string;
+  scheduled_for: string;
+  status: string;
+  created_at: string;
+  users: UserData;
+}
+
+// Our clean booking interface for the component
 interface Booking {
   id: string;
   user_id: string;
   scheduled_for: string;
   status: string;
   created_at: string;
-  user_details?: {
-    name: string;
-    email: string;
-  };
+  userData: UserData | null;
 }
 
 export default function BookingManager() {
@@ -47,15 +60,24 @@ export default function BookingManager() {
 
       if (error) throw error;
       
-      const formattedBookings = data?.map(booking => ({
-        ...booking,
-        user_details: booking.users
-      })) || [];
-      
-      setBookings(formattedBookings);
+      // Process the data to match our expected format
+      if (data) {
+        const processedData: Booking[] = data.map((item: any) => ({
+          id: item.id,
+          user_id: item.user_id,
+          scheduled_for: item.scheduled_for,
+          status: item.status,
+          created_at: item.created_at,
+          userData: item.users || null
+        }));
+        setBookings(processedData);
+      } else {
+        setBookings([]);
+      }
     } catch (error) {
       console.error('Error fetching bookings:', error);
       toast.error('Failed to load bookings');
+      setBookings([]);
     } finally {
       setLoading(false);
     }
@@ -109,7 +131,7 @@ export default function BookingManager() {
                   <div className="flex items-center space-x-2">
                     <User className="h-5 w-5 text-emerald-600" />
                     <p className="text-gray-600">
-                      {booking.user_details?.name || 'Unknown Patient'}
+                      {booking.userData?.name || 'Unknown Patient'}
                     </p>
                   </div>
                 </div>
