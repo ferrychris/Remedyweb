@@ -55,7 +55,7 @@ export function Consultations() {
       const { data, error } = await supabase
         .from('consultants')
         .select('id, name, specialty, bio, status, created_at')
-        .eq('status', 'active')
+        .eq('is_available', true)
         .order('name', { ascending: true });
 
       if (error) throw error;

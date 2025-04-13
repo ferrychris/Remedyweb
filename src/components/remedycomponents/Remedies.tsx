@@ -1,14 +1,22 @@
-
 import  { useState, useEffect } from 'react';
 
-
-
 import { Link, useNavigate } from 'react-router-dom';
-import { ThumbsUp, MessageSquare, Search, Plus, Loader2 } from 'lucide-react';
+import { ThumbsUp, MessageSquare, Search, Plus, Loader2, Send } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/auth';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
+
+interface Comment {
+  id: string;
+  content: string;
+  created_at: string;
+  user_id: string;
+  user_profile: {
+    display_name: string;
+    avatar_url: string;
+  };
+}
 
 interface Remedy {
   id: number;
@@ -32,6 +40,7 @@ interface Remedy {
     created_at: string;
     updated_at: string;
   };
+  comments?: Comment[];
 }
 
 function Remedies() {
@@ -42,6 +51,8 @@ function Remedies() {
   const [remedies, setRemedies] = useState<Remedy[]>([]);
   const [loading, setLoading] = useState(true);
   const [likingIds, setLikingIds] = useState<number[]>([]);
+  const [commentingIds, setCommentingIds] = useState<number[]>([]);
+  const [newComments, setNewComments] = useState<Record<number, string>>({});
 
   useEffect(() => {
     fetchRemedies();
@@ -54,17 +65,13 @@ function Remedies() {
       return;
     }
     
-    // Prevent double-clicking
     if (likingIds.includes(remedyId)) return;
     
-    // Get the current remedy
     const remedyToUpdate = remedies.find(r => r.id === remedyId);
     if (!remedyToUpdate) return;
     
-    // Add to loading state
     setLikingIds(prev => [...prev, remedyId]);
     
-    // Optimistically update UI
     const isCurrentlyLiked = remedyToUpdate.is_liked || false;
     const updatedRemedies = remedies.map(r => 
       r.id === remedyId 
@@ -81,7 +88,6 @@ function Remedies() {
   
     try {
       if (isCurrentlyLiked) {
-        // Unlike the remedy
         const { error: unlikeError } = await supabase
           .from("remedy_likes")
           .delete()
@@ -90,7 +96,6 @@ function Remedies() {
   
         if (unlikeError) throw unlikeError;
       } else {
-        // Like the remedy
         const { error: likeError } = await supabase
           .from("remedy_likes")
           .insert({
@@ -103,13 +108,78 @@ function Remedies() {
     } catch (error) {
       console.error("Error handling like:", error);
       toast.error("Failed to update like");
-      // Revert optimistic update
       setRemedies(prevRemedies => prevRemedies.map(r => 
         r.id === remedyId ? { ...remedyToUpdate } : r
       ));
     } finally {
-      // Remove from loading state
       setLikingIds(prev => prev.filter(id => id !== remedyId));
+    }
+  };
+
+  const handleComment = async (remedyId: number) => {
+    if (!user) {
+      toast.error("Please sign in to comment");
+      navigate('/login');
+      return;
+    }
+
+    const commentContent = newComments[remedyId]?.trim();
+    if (!commentContent) {
+      toast.error("Comment cannot be empty");
+      return;
+    }
+
+    if (commentingIds.includes(remedyId)) return;
+    setCommentingIds(prev => [...prev, remedyId]);
+
+    try {
+      const { data: comment, error } = await supabase
+        .from('remedy_comments')
+        .insert({
+          remedy_id: remedyId,
+          user_id: user.id,
+          content: commentContent,
+        })
+        .select(`
+          *,
+          user_profile:user_id (
+            display_name,
+            avatar_url
+          )
+        `)
+        .single();
+
+      if (error) throw error;
+
+      // Update the remedies state with the new comment
+      setRemedies(prevRemedies => prevRemedies.map(remedy => {
+        if (remedy.id === remedyId) {
+          return {
+            ...remedy,
+            comments_count: (remedy.comments_count || 0) + 1,
+            comments: [
+              ...(remedy.comments || []),
+              {
+                id: comment.id,
+                content: comment.content,
+                created_at: comment.created_at,
+                user_id: comment.user_id,
+                user_profile: comment.user_profile
+              }
+            ]
+          };
+        }
+        return remedy;
+      }));
+
+      // Clear the comment input
+      setNewComments(prev => ({ ...prev, [remedyId]: '' }));
+      toast.success("Comment added successfully");
+    } catch (error) {
+      console.error("Error adding comment:", error);
+      toast.error("Failed to add comment");
+    } finally {
+      setCommentingIds(prev => prev.filter(id => id !== remedyId));
     }
   };
 
@@ -117,7 +187,6 @@ function Remedies() {
     try {
       setLoading(true);
       
-      // Get basic remedy data
       const { data: remediesData, error: remediesError } = await supabase
         .from('remedies')
         .select(`
@@ -128,6 +197,16 @@ function Remedies() {
             avatar_url,
             created_at,
             updated_at
+          ),
+          comments:remedy_comments (
+            id,
+            content,
+            created_at,
+            user_id,
+            user_profile:user_id (
+              display_name,
+              avatar_url
+            )
           )
         `)
         .order('created_at', { ascending: false });
@@ -136,7 +215,6 @@ function Remedies() {
       
       let enrichedRemedies = remediesData || [];
       
-      // If user is logged in, check which remedies are liked by the user
       if (user) {
         const { data: likedRemedies, error: likesError } = await supabase
           .from('remedy_likes')
@@ -180,20 +258,35 @@ function Remedies() {
     <div className="max-w-7xl mx-auto py-8 px-4">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
         <h1 className="text-3xl font-bold text-gray-900">Natural Remedies</h1>
-        <Link
-          to={user ? "/submit-remedy" : "/login"}
-          className="inline-flex items-center px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors"
-          onClick={(e) => {
-            if (!user) {
-              e.preventDefault();
-              toast.error("Please sign in to submit a remedy");
-              navigate('/login');
-            }
-          }}
-        >
-          <Plus className="h-5 w-5 mr-2" />
-          Submit Remedy
-        </Link>
+        <div className="flex gap-4">
+          <Link
+            to="/remedies"
+            className="inline-flex items-center px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors"
+          >
+            <Search className="h-5 w-5 mr-2" />
+            Browse Remedies
+          </Link>
+          {user ? (
+            <Link
+              to="/submit-remedy"
+              className="inline-flex items-center px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors"
+            >
+              <Plus className="h-5 w-5 mr-2" />
+              Submit Remedy
+            </Link>
+          ) : (
+            <button
+              onClick={() => {
+                toast.error("Please sign in to submit a remedy");
+                navigate('/login');
+              }}
+              className="inline-flex items-center px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors"
+            >
+              <Plus className="h-5 w-5 mr-2" />
+              Submit Remedy
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-col md:flex-row gap-4 mb-8">
@@ -310,6 +403,68 @@ function Remedies() {
                       <MessageSquare className="h-4 w-4 text-emerald-600" />
                       <span className="text-sm text-emerald-700">{remedy.comments_count || 0} comments</span>
                     </Link>
+                  </div>
+
+                  {/* Comments Section */}
+                  <div className="mt-4 space-y-4">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={newComments[remedy.id] || ''}
+                        onChange={(e) => setNewComments(prev => ({
+                          ...prev,
+                          [remedy.id]: e.target.value
+                        }))}
+                        placeholder="Add a comment..."
+                        className="flex-1 px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                      <button
+                        onClick={() => handleComment(remedy.id)}
+                        disabled={commentingIds.includes(remedy.id)}
+                        className="p-2 text-emerald-600 hover:text-emerald-700 disabled:opacity-50"
+                      >
+                        {commentingIds.includes(remedy.id) ? (
+                          <Loader2 className="h-5 w-5 animate-spin" />
+                        ) : (
+                          <Send className="h-5 w-5" />
+                        )}
+                      </button>
+                    </div>
+
+                    {remedy.comments && remedy.comments.length > 0 && (
+                      <div className="space-y-3">
+                        {remedy.comments.slice(0, 2).map((comment) => (
+                          <div key={comment.id} className="flex items-start gap-3">
+                            <img
+                              src={comment.user_profile.avatar_url || '/default-avatar.png'}
+                              alt={comment.user_profile.display_name}
+                              className="w-8 h-8 rounded-full"
+                            />
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium text-sm">
+                                  {comment.user_profile.display_name}
+                                </span>
+                                <span className="text-xs text-gray-500">
+                                  {new Date(comment.created_at).toLocaleDateString()}
+                                </span>
+                              </div>
+                              <p className="text-sm text-gray-700 mt-1">
+                                {comment.content}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                        {remedy.comments.length > 2 && (
+                          <Link
+                            to={`/remedies/${remedy.slug}`}
+                            className="block text-sm text-emerald-600 hover:text-emerald-700 font-medium"
+                          >
+                            View all {remedy.comments.length} comments
+                          </Link>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               </motion.div>

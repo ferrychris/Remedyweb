@@ -35,6 +35,7 @@ export default function BookingModal({
     const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
     const [groupedSlots, setGroupedSlots] = useState<Record<string, AvailabilitySlot[]>>({});
     const [consultantData, setConsultantData] = useState<{name: string, specialty: string} | null>(null);
+    const [error, setError] = useState<string | null>(null);
 
     // Fetch consultant details if consultantName is not provided
     useEffect(() => {
@@ -47,7 +48,7 @@ export default function BookingModal({
         try {
             const { data, error } = await supabase
                 .from('consultants')
-                .select('first_name, last_name, specialty')
+                .select('name, specialty')
                 .eq('id', consultantId)
                 .single();
 
@@ -55,7 +56,7 @@ export default function BookingModal({
             
             if (data) {
                 setConsultantData({
-                    name: `${data.first_name} ${data.last_name}`,
+                    name: `${data.name}`,
                     specialty: data.specialty
                 });
             }
@@ -64,31 +65,51 @@ export default function BookingModal({
         }
     };
 
-    useEffect(() => {
-        if (isOpen && consultantId) {
-            fetchAvailabilitySlots();
-        }
-    }, [isOpen, consultantId]);
+    const fetchAvailabilitySlots = useCallback(async () => {
+        if (!consultantId) return;
 
-    const fetchAvailabilitySlots = async () => {
         setLoading(true);
+        setError(null);
         try {
-            const { data, error } = await supabase
+            // First check if consultant is available
+            const { data: consultantData, error: consultantError } = await supabase
+                .from('consultants')
+                .select('is_available')
+                .eq('id', consultantId)
+                .single();
+
+            if (consultantError) throw consultantError;
+
+            if (!consultantData?.is_available) {
+                setError('Consultant is currently not available for bookings');
+                setAvailabilitySlots([]);
+                setLoading(false);
+                return;
+            }
+
+            // Then fetch available slots
+            const { data: slotsData, error: slotsError } = await supabase
                 .from('availability_slots')
                 .select('*')
                 .eq('consultant_id', consultantId)
                 .eq('is_booked', false)
-                .gte('start_time', new Date().toISOString())
+                .gt('start_time', new Date().toISOString())
                 .order('start_time', { ascending: true });
 
-            if (error) throw error;
-            
-            const slots = data || [];
-            setAvailabilitySlots(slots);
+            if (slotsError) throw slotsError;
+
+            if (!slotsData || slotsData.length === 0) {
+                setError('No available slots found for this consultant');
+                setAvailabilitySlots([]);
+                setLoading(false);
+                return;
+            }
+
+            setAvailabilitySlots(slotsData);
             
             // Group slots by date
             const grouped: Record<string, AvailabilitySlot[]> = {};
-            slots.forEach(slot => {
+            slotsData.forEach(slot => {
                 const date = new Date(slot.start_time).toLocaleDateString();
                 if (!grouped[date]) {
                     grouped[date] = [];
@@ -97,13 +118,19 @@ export default function BookingModal({
             });
             
             setGroupedSlots(grouped);
-        } catch (error) {
-            console.error('Error fetching availability slots:', error);
-            toast.error('Failed to load availability slots');
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to fetch availability slots');
+            setAvailabilitySlots([]);
         } finally {
             setLoading(false);
         }
-    };
+    }, [consultantId]);
+
+    useEffect(() => {
+        if (isOpen && consultantId) {
+            fetchAvailabilitySlots();
+        }
+    }, [isOpen, consultantId, fetchAvailabilitySlots]);
 
     const handleBookSlot = async () => {
         if (!selectedSlot || !user) return;
@@ -111,7 +138,7 @@ export default function BookingModal({
         try {
             // Confirm booking
             const isConfirmed = window.confirm(
-                `Are you sure you want to book this appointment with Dr. ${consultantName || consultantData?.name || 'the consultant'}?`
+                `Are you sure you want to book this appointment with ${consultantName || consultantData?.name || 'the consultant'}?`
             );
             
             if (!isConfirmed) return;
@@ -185,7 +212,7 @@ export default function BookingModal({
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
             <div className="bg-white rounded-xl shadow-lg max-w-md w-full max-h-[80vh] overflow-auto">
                 <div className="sticky top-0 bg-white z-10 p-4 border-b flex justify-between items-center">
-                    <h2 className="text-xl font-bold text-gray-800">Book Appointment with Dr. {consultantName || consultantData?.name || 'the consultant'}</h2>
+                    <h2 className="text-xl font-bold text-gray-800">Book Appointment with {consultantName || consultantData?.name || 'the consultant'}</h2>
                     <button 
                         onClick={onClose}
                         className="text-gray-400 hover:text-gray-600"
@@ -199,9 +226,14 @@ export default function BookingModal({
                         <div className="flex justify-center items-center h-48">
                             <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-emerald-500"></div>
                         </div>
+                    ) : error ? (
+                        <div className="text-center py-8">
+                            <p className="text-red-600">{error}</p>
+                            <p className="text-gray-500 mt-2">Please check back later or select another consultant.</p>
+                        </div>
                     ) : Object.keys(groupedSlots).length === 0 ? (
                         <div className="text-center py-8">
-                            <p className="text-gray-600">No available slots found for this consultant.</p>
+                            <p className="text-gray-600">No available slots found for {consultantName || consultantData?.name || 'the consultant'}.</p>
                             <p className="text-gray-500 mt-2">Please check back later or select another consultant.</p>
                         </div>
                     ) : (

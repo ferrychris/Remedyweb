@@ -1,15 +1,8 @@
 // src/components/userdashboard/sections/Orders.tsx
 import { useState, useEffect } from 'react';
-import { supabase } from '../../lib/supabase';
-import { useAuth } from '../../lib/auth';
+import { supabase } from '../../../lib/supabaseClient';
+import { useAuth } from '../../../lib/auth';
 import toast from 'react-hot-toast';
-
-interface Product {
-  id: string;
-  title: string;
-  price?: number;
-  image?: string | null;
-}
 
 interface OrderItem {
   id: string;
@@ -17,7 +10,13 @@ interface OrderItem {
   product_id: string;
   quantity: number;
   price_at_purchase: number;
-  product: Product;
+  product: { 
+    id: string;
+    name: string;
+    // Add other product properties that might be needed
+    price?: number;
+    image?: string | null;
+  };
 }
 
 interface Order {
@@ -44,28 +43,7 @@ export function Orders() {
         setLoading(true);
         const { data: ordersData, error: ordersError } = await supabase
           .from('orders')
-          .select(`
-            id,
-            user_id,
-            total,
-            status,
-            created_at,
-            updated_at,
-            shipping_address,
-            order_items!inner (
-              id,
-              order_id,
-              product_id,
-              quantity,
-              price_at_purchase,
-              products!inner (
-                id,
-                title,
-                price,
-                image
-              )
-            )
-          `)
+          .select('id, user_id, total, status, created_at, updated_at, shipping_address')
           .eq('user_id', user.id)
           .order('created_at', { ascending: false });
 
@@ -78,22 +56,47 @@ export function Orders() {
 
         const processedOrders = await Promise.all(
           ordersData.map(async (order) => {
-            // Transform the order items with proper product data
-            const transformedItems = (order.order_items || []).map(item => {
-              const products = item.products as Product[] || [];
-              const product = products[0] || {} as Product;
+            const { data: itemsData, error: itemsError } = await supabase
+              .from('order_items')
+              .select('id, order_id, product_id, quantity, price_at_purchase, product:products(id, name, price, image)')
+              .eq('order_id', order.id);
+
+            if (itemsError) throw itemsError;
+
+            // Transform the item data with proper typecasting to match OrderItem interface
+            const transformedItems = (itemsData || []).map(item => {
+              // Safely handle the product property regardless of format
+              let productObj: { id: string; name: string; price?: number; image?: string | null };
+              
+              if (item.product) {
+                // Handle either array or object format by using a type assertion
+                const productData = Array.isArray(item.product) && item.product.length > 0
+                  ? item.product[0] as any
+                  : item.product as any;
+                  
+                // Now safely access properties with proper null checking
+                productObj = {
+                  id: String(productData?.id || item.product_id || ''),
+                  name: String(productData?.name || 'Product'),
+                  price: typeof productData?.price === 'number' ? productData.price : undefined,
+                  image: productData?.image || null
+                };
+              } else {
+                // Fallback if no product data
+                productObj = {
+                  id: String(item.product_id || ''),
+                  name: 'Product',
+                  image: null
+                };
+              }
+              
               return {
                 id: String(item.id),
                 order_id: String(item.order_id),
                 product_id: String(item.product_id),
                 quantity: Number(item.quantity),
                 price_at_purchase: Number(item.price_at_purchase),
-                product: {
-                  id: String(product.id || ''),
-                  title: String(product.title || 'Product'),
-                  price: typeof product.price === 'number' ? product.price : undefined,
-                  image: product.image || null
-                }
+                product: productObj
               } as OrderItem;
             });
 
@@ -200,7 +203,7 @@ export function Orders() {
                       <ul className="list-disc list-inside">
                         {order.order_items.map((item) => (
                           <li key={item.id}>
-                            {item.product.title} (x{item.quantity}) - ${(
+                            {item.product.name} (x{item.quantity}) - ${(
                               item.price_at_purchase * item.quantity
                             ).toFixed(2)}
                           </li>

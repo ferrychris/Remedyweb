@@ -13,7 +13,6 @@ import { useAuth } from "../lib/auth";
 import { AuthModal } from "./AuthModal";
 import { SearchBar } from "./SearchBar";
 import { motion, AnimatePresence } from 'framer-motion';
-import UserNavbar from './userdashboard/UserNavbar';
 
 function Navbar({ toggleSidebar }) {
   const { user, profile, isAdmin, signOut } = useAuth();
@@ -57,7 +56,7 @@ function Navbar({ toggleSidebar }) {
             {/* Hamburger Menu - Hidden on large screens */}
             <button
               onClick={toggleSidebar}
-              className="md:hidden focus:outline-none "
+              className="md:hidden focus:outline-none"
             >
               <Menu className="h-10 w-10 text-gray-600" />
             </button>
@@ -71,7 +70,7 @@ function Navbar({ toggleSidebar }) {
                 <Leaf className="h-6 w-6" />
               </div>
               <span className="font-bold text-xl bg-gradient-to-r from-emerald-600 to-emerald-500 bg-clip-text text-transparent">
-                Different Doctors
+                Remedy
               </span>
             </Link>
 
@@ -81,17 +80,13 @@ function Navbar({ toggleSidebar }) {
                 <Home className="h-5 w-5" />
                 <span>Home</span>
               </NavLink>
-              <NavLink to="/remedies" active={isActive("/remedies")}>
-                <Leaf className="h-5 w-5" />
-                <span>Remedies</span>
-              </NavLink>
-              <NavLink to="/ailments" active={isActive("/ailments")}>
+              <NavLink to="/dashboard" active={isActive("/dashboard")}>
                 <Activity className="h-5 w-5" />
-                <span>Ailments</span>
+                <span>Dashboard</span>
               </NavLink>
-              <NavLink to="/store" active={isActive("/store")}>
-                <ShoppingBag className="h-5 w-5" />
-                <span>Store</span>
+              <NavLink to="/consultant" active={isActive("/consultant")}>
+                <UserCircle className="h-5 w-5" />
+                <span>Consultant</span>
               </NavLink>
             </div>
 
@@ -143,7 +138,7 @@ function Navbar({ toggleSidebar }) {
                         My Dashboard
                       </Link>
                       <Link
-                        to="/consultant-dashboard"
+                        to="/consultant"
                         className="block px-4 py-2 text-sm text-gray-700 hover:bg-emerald-50 hover:text-emerald-600"
                         onClick={() => setAccountMenuOpen(false)}
                       >

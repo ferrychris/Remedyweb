@@ -72,7 +72,7 @@ export default function SubmitRemedy() {
 
       // No need to initialize likes and comments as we have default values
       toast.success('Remedy submitted successfully!');
-      navigate(`/remedies/${slug}`);
+      navigate('/remedies');
     } catch (error: any) {
       console.error('Error submitting remedy:', error);
       toast.error(error.message || 'Failed to submit remedy');

@@ -41,18 +41,19 @@ function ConsultationBooking() {
         setLoading(true);
         setError(null);
         try {
-            // First fetch all active consultants
+            // First fetch all active and available consultants
             const { data: consultantsData, error: consultantsError } = await supabase
                 .from('consultants')
                 .select('*')
                 .eq('is_active', true)
-                .eq('status', 'active');
+                .eq('status', 'active')
+                .eq('is_available', true);  // Add check for is_available
 
             if (consultantsError) throw consultantsError;
 
             if (!consultantsData || consultantsData.length === 0) {
                 setConsultants([]);
-                console.log('No active consultants found');
+                console.log('No available consultants found');
                 setLoading(false);
                 return;
             }

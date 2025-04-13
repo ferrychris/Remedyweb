@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Menu, X, ShoppingCart } from 'lucide-react';
+import { Search, Menu, X, ShoppingCart, Calendar } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
 import { Link } from 'react-router-dom';
 import { getCartItems, getCartTotal, getCartCount, CartItem } from '../../lib/cart';
+import BookingModal from './consultation/BookingModal';
 
 interface UserNavbarProps {
   toggleSidebar: () => void;
@@ -15,6 +16,7 @@ const UserNavbar: React.FC<UserNavbarProps> = ({ toggleSidebar, sidebarVisible }
   const [showCart, setShowCart] = useState(false);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [selectedConsultant, setSelectedConsultant] = useState<string | null>(null);
   
   // Refs for dropdown positioning
   const cartRef = useRef<HTMLDivElement>(null);
@@ -63,6 +65,10 @@ const UserNavbar: React.FC<UserNavbarProps> = ({ toggleSidebar, sidebarVisible }
   
   const cartCount = getCartCount(cartItems);
   const cartTotal = getCartTotal(cartItems);
+
+  const handleBookingSuccess = () => {
+    setSelectedConsultant(null);
+  };
   
   return (
     <div className="bg-white border-b border-gray-200 h-16 px-2 sm:px-4 flex items-center justify-between">
@@ -90,8 +96,17 @@ const UserNavbar: React.FC<UserNavbarProps> = ({ toggleSidebar, sidebarVisible }
         </div>
       </div>
       
-      {/* Right side - Cart and Profile */}
+      {/* Right side - Cart, Consultation, and Profile */}
       <div className="flex items-center space-x-1 sm:space-x-2">
+        {/* Consultation Button */}
+        <button
+          onClick={() => setSelectedConsultant('new')}
+          className="flex items-center px-3 py-1.5 text-sm bg-emerald-600 text-white rounded-md hover:bg-emerald-700 transition-colors"
+        >
+          <Calendar className="h-4 w-4 mr-2" />
+          <span className="hidden sm:inline">Book Consultation</span>
+        </button>
+
         <div className="relative" ref={cartRef}>
           <button 
             onClick={() => {
@@ -181,12 +196,15 @@ const UserNavbar: React.FC<UserNavbarProps> = ({ toggleSidebar, sidebarVisible }
                 <p className="text-xs text-gray-500 mt-1">Patient</p>
               </div>
               <div>
-                <button className="w-full text-left p-3 text-sm text-gray-700 hover:bg-gray-50">
+                <Link to="/dashboard/profile" className="block w-full text-left p-3 text-sm text-gray-700 hover:bg-gray-50">
                   My Profile
-                </button>
-                <button className="w-full text-left p-3 text-sm text-gray-700 hover:bg-gray-50">
+                </Link>
+                <Link to="/dashboard/health" className="block w-full text-left p-3 text-sm text-gray-700 hover:bg-gray-50">
                   Health Records
-                </button>
+                </Link>
+                <Link to="/dashboard/consultations" className="block w-full text-left p-3 text-sm text-gray-700 hover:bg-gray-50">
+                  My Consultations
+                </Link>
                 <button className="w-full text-left p-3 text-sm text-red-600 hover:bg-red-50 border-t border-gray-100">
                   Sign Out
                 </button>
@@ -195,6 +213,16 @@ const UserNavbar: React.FC<UserNavbarProps> = ({ toggleSidebar, sidebarVisible }
           )}
         </div>
       </div>
+
+      {/* Booking Modal */}
+      {selectedConsultant && (
+        <BookingModal
+          isOpen={selectedConsultant !== null}
+          onClose={() => setSelectedConsultant(null)}
+          consultantId={selectedConsultant}
+          onBookingSuccess={handleBookingSuccess}
+        />
+      )}
     </div>
   );
 };
