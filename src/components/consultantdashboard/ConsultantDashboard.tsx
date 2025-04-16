@@ -10,6 +10,8 @@ import {
   X
 } from 'lucide-react';
 import AppointmentManager from '../consultantsdash/AppointmentManager';
+import PricingManager from '../consultantsdash/PricingManager';
+import BookingManager from '../consultantsdash/BookingManager';
 import AvailabilityManager from '../consultantsdash/AvailabilityManager';
 const navigation = [
   { name: 'Overview', href: '/consultant', icon: LayoutDashboard },

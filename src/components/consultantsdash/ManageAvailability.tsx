@@ -28,9 +28,8 @@ interface NewSlotForm {
   endDate: string;
   endTime: string;
 }
-
 function ManageAvailability() {
-  const { user, role, loading: authLoading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [consultants, setConsultants] = useState<Consultant[]>([]);
   const [selectedConsultantId, setSelectedConsultantId] = useState<string | null>(null);
   const [slots, setSlots] = useState<AppointmentSlot[]>([]);
@@ -47,9 +46,9 @@ function ManageAvailability() {
   // Log the role for debugging
   useEffect(() => {
     if (!authLoading) {
-      console.log('User role after auth loading:', role);
+      console.log('User role after auth loading:', user?.role);
     }
-  }, [authLoading, role]);
+  }, [authLoading, user]);
 
   // 1. Fetch All Consultants
   const fetchConsultants = useCallback(async () => {
@@ -127,10 +126,10 @@ function ManageAvailability() {
 
   // Fetch consultants when the component mounts, but only after auth loading is complete
   useEffect(() => {
-    if (!authLoading && role === 'admin') {
+    if (!authLoading && user?.role === 'admin') {
       fetchConsultants();
     }
-  }, [authLoading, fetchConsultants, role]);
+  }, [authLoading, fetchConsultants, user?.role]);
 
   // Fetch slots when a consultant is selected
   useEffect(() => {
@@ -313,13 +312,12 @@ function ManageAvailability() {
   if (!user) {
     return <p className="text-center text-red-600 p-4">Please log in to manage availability.</p>;
   }
-
   // Check if the user is an admin
-  if (role !== 'admin') {
+  if (user?.user_metadata?.role !== 'admin') {
     return (
       <div className="text-center p-4">
         <p className="text-red-600">Access Denied: Only admins can manage consultant availability.</p>
-        <p className="text-gray-600 mt-2">Your role: {role || 'unknown'}</p>
+        <p className="text-gray-600 mt-2">Your role: {user?.user_metadata?.role || 'unknown'}</p>
       </div>
     );
   }

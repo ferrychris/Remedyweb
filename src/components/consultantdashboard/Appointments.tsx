@@ -60,7 +60,7 @@ export function Appointments() {
       const formattedAppointments = appointmentsData?.map(appointment => ({
         id: appointment.id,
         patient_id: appointment.patient_id,
-        patient_name: appointment.user_profiles?.name || 'Unknown',
+        patient_name: appointment.user_profiles?.[0]?.name || 'Unknown',
         scheduled_date: appointment.scheduled_date,
         status: appointment.status,
         duration: appointment.duration,
